@@ -18,6 +18,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
+ * Purely performance-oriented class that allows for reflective access to a
+ * String's char array. If Reflection is disabled, the provided methods will
+ * fall-back on non-reflective solutions, and log an approriate failure message.
  *
  * @author Jan Kebernik
  */
@@ -87,7 +90,8 @@ public final class Strings {
 
 	private static Function<String, char[]> getter() {
 		// Reflection API seems fastest here.
-		// 2.000.000.000 accesses in ~6 seconds is much better than expected.
+		// Cannot use lambdas, because private fields cannot be accessed that 
+		// way (in the absence of a getter method).
 		try {
 			Field field = String.class.getDeclaredField("value");
 			field.setAccessible(true);
@@ -108,12 +112,31 @@ public final class Strings {
 	private Strings() {
 	}
 
-	// inherently unsafe, because array might be leaked. 
-	// only use for trusted impls that do not leak the array.
+	/**
+	 * Attempts to create a new String instance sharing the specified char
+	 * array. If Reflection is disabled, will fall back on regular String
+	 * instantiation. This method is not safe, as there is potential for
+	 * String's immutability contract to be broken due to leaked internals. Use
+	 * at your own risk.
+	 *
+	 * @param a the char array to be shared by the new String
+	 * @return a new String sharing the supplied char array or at least its
+	 * contents.
+	 */
 	public static final String newString(char[] a) {
 		return CONSTRUCTOR.apply(a, true);
 	}
 
+	/**
+	 * Attempts to return the specified String's internal char array. If
+	 * Reflection is disabled, will return a new char array with equal contents.
+	 * This method is not safe, as there is potential for String's immutability
+	 * contract to be broken due to leaked internals. Use at your own risk.
+	 *
+	 * @param s the String whose char array to return
+	 * @return the char array used by the supplied String or a new char array
+	 * with the String's contents
+	 */
 	public static final char[] getValue(String s) {
 		return GETTER.apply(s);
 	}
