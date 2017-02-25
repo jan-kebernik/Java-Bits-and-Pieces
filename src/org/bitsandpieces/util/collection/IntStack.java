@@ -339,7 +339,7 @@ public class IntStack implements IntQueue {
 					throw new IllegalStateException();
 				}
 				int[] a = IntStack.this.array;
-				return a[this.idx = i + 1];
+				return a[this.idx = i - 1];
 			}
 
 			@Override
