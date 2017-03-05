@@ -26,7 +26,18 @@ public class IntStack implements IntQueue {
 
 	private int index = 0;
 	private int[] array = EMPTY;
-
+	
+	public IntStack() {
+		this.array = EMPTY;
+	}
+	
+	public IntStack(int initialCapacity) {
+		if (initialCapacity < 0) {
+			throw new IllegalArgumentException();
+		}
+		this.array = initialCapacity == 0 ? EMPTY : new int[initialCapacity];
+	}
+	
 	@Override
 	public boolean addInt(int element) {
 		int i = this.index;

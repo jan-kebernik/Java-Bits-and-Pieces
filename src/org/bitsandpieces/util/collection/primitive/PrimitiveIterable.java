@@ -13,6 +13,7 @@ import java.util.function.Consumer;
 import java.util.function.DoubleConsumer;
 import java.util.function.IntConsumer;
 import java.util.function.LongConsumer;
+import org.bitsandpieces.util.function.CharConsumer;
 
 /**
  *
@@ -27,7 +28,7 @@ public interface PrimitiveIterable<T, T_CONS, T_ITR extends PrimitiveIterator<T,
 
 	@Override
 	T_ITR iterator();
-
+	
 	public static interface IntIterable extends PrimitiveIterable<Integer, IntConsumer, PrimitiveIterator.OfInt, Spliterator.OfInt> {
 
 		@Override

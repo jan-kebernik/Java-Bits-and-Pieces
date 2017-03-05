@@ -7,6 +7,7 @@ package org.bitsandpieces.util;
 
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.Objects;
 import org.bitsandpieces.util.collection.primitive.PrimitiveComparator.BooleanComparator;
 import org.bitsandpieces.util.collection.primitive.PrimitiveComparator.ByteComparator;
 import org.bitsandpieces.util.collection.primitive.PrimitiveComparator.CharComparator;
@@ -537,5 +538,226 @@ public class ArrayUtil {
 	public static <T> T[] fill(T[] a, int fromIndex, int toIndex, T val) {
 		Arrays.fill(a, fromIndex, toIndex, val);
 		return a;
+	}
+
+	public static String toString(byte[] a) {
+		return _toString(a, 0, a.length, Formats.DEC);
+	}
+
+	public static String toString(byte[] a, Format f) {
+		Objects.requireNonNull(f);
+		return _toString(a, 0, a.length, f);
+	}
+
+	public static String toString(byte[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, Formats.DEC);
+	}
+
+	public static String toString(byte[] a, int fromIndex, int toIndex, Format f) {
+		Objects.requireNonNull(f);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, f);
+	}
+
+	private static String _toString(byte[] a, int fromIndex, int toIndex, Format f) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
+		sm.append('[').append(a[fromIndex], f);
+		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(a[i], f0);
+		}
+		return sm.append(']').toString();
+	}
+
+	public static String toString(char[] a) {
+		return _toString(a, 0, a.length);
+	}
+
+	public static String toString(char[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex);
+	}
+
+	private static String _toString(char[] a, int fromIndex, int toIndex) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
+		sm.append('[').append(a[fromIndex]);
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(", ").append(a[i]);
+		}
+		return sm.append(']').toString();
+	}
+
+	public static String toString(char[] a, Format f) {
+		Objects.requireNonNull(f);
+		return _toString(a, 0, a.length, f);
+	}
+
+	public static String toString(char[] a, int fromIndex, int toIndex, Format f) {
+		Objects.requireNonNull(f);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, f);
+	}
+
+	private static String _toString(char[] a, int fromIndex, int toIndex, Format f) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
+		sm.append('[').append(a[fromIndex], f);
+		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(a[i], f0);
+		}
+		return sm.append(']').toString();
+	}
+
+	public static String toString(short[] a) {
+		return _toString(a, 0, a.length, Formats.DEC);
+	}
+
+	public static String toString(short[] a, Format f) {
+		Objects.requireNonNull(f);
+		return _toString(a, 0, a.length, f);
+	}
+
+	public static String toString(short[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, Formats.DEC);
+	}
+
+	public static String toString(short[] a, int fromIndex, int toIndex, Format f) {
+		Objects.requireNonNull(f);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, f);
+	}
+
+	private static String _toString(short[] a, int fromIndex, int toIndex, Format f) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
+		sm.append('[').append(a[fromIndex], f);
+		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(a[i], f0);
+		}
+		return sm.append(']').toString();
+	}
+
+	public static String toString(int[] a) {
+		return _toString(a, 0, a.length, Formats.DEC);
+	}
+
+	public static String toString(int[] a, Format f) {
+		Objects.requireNonNull(f);
+		return _toString(a, 0, a.length, f);
+	}
+
+	public static String toString(int[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, Formats.DEC);
+	}
+
+	public static String toString(int[] a, int fromIndex, int toIndex, Format f) {
+		Objects.requireNonNull(f);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, f);
+	}
+
+	private static String _toString(int[] a, int fromIndex, int toIndex, Format f) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
+		sm.append('[').append(a[fromIndex], f);
+		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(a[i], f0);
+		}
+		return sm.append(']').toString();
+	}
+
+	public static String toString(long[] a) {
+		return _toString(a, 0, a.length, Formats.DEC);
+	}
+
+	public static String toString(long[] a, Format f) {
+		Objects.requireNonNull(f);
+		return _toString(a, 0, a.length, f);
+	}
+
+	public static String toString(long[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, Formats.DEC);
+	}
+
+	public static String toString(long[] a, int fromIndex, int toIndex, Format f) {
+		Objects.requireNonNull(f);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex, f);
+	}
+
+	private static String _toString(long[] a, int fromIndex, int toIndex, Format f) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
+		sm.append('[').append(a[fromIndex], f);
+		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(a[i], f0);
+		}
+		return sm.append(']').toString();
+	}
+
+	public static String toString(float[] a) {
+		return _toString(a, 0, a.length);
+	}
+
+	public static String toString(float[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex);
+	}
+
+	private static String _toString(float[] a, int fromIndex, int toIndex) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		// StringBuilder able to use FloatingDecimal under the hood
+		StringBuilder sm = new StringBuilder(a.length * 3);
+		sm.append('[').append(a[fromIndex]);
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(", ").append(a[i]);
+		}
+		return sm.append(']').toString();
+	}
+
+	public static String toString(double[] a) {
+		return _toString(a, 0, a.length);
+	}
+
+	public static String toString(double[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex);
+	}
+
+	private static String _toString(double[] a, int fromIndex, int toIndex) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		// StringBuilder able to use FloatingDecimal under the hood
+		StringBuilder sm = new StringBuilder(a.length * 3);
+		sm.append('[').append(a[fromIndex]);
+		for (int i = fromIndex + 1; i < toIndex; i++) {
+			sm.append(", ").append(a[i]);
+		}
+		return sm.append(']').toString();
 	}
 }

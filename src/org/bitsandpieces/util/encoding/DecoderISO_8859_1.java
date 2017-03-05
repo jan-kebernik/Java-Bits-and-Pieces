@@ -7,18 +7,13 @@ package org.bitsandpieces.util.encoding;
 
 /**
  *
- * @author Jan Kebernik
+ * @author pp
  */
 final class DecoderISO_8859_1 extends SingleByteDecoder {
-	
-	@Override
-	char translate(byte inputByte) {
-		return (char) (inputByte & 0xff);
-	}
 
 	@Override
-	boolean mappable(char i) {
-		return true;
+	char convert(byte b) {
+		return ((char) (b & 0xff));
 	}
 
 	@Override

@@ -5,98 +5,75 @@
  */
 package org.bitsandpieces.util.encoding;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
+
 /**
  *
- * @author Jan Kebernik
+ * @author pp
  */
 abstract class SingleByteDecoder extends AbstractDecoder {
 
-	SingleByteDecoder() {
-		super(0);
-	}
-	// 1 byte == 1 char
+	static final char NO_DEF = 0xFFFF;
 
-	private void put(int index, char c) {
-		preparePut(index)[index] = c;
-	}
-
-	// tr to 16-bit codepoint
-	abstract char translate(byte inputByte);
-
-	abstract boolean mappable(char i);
+	abstract char convert(byte b);
 
 	@Override
-	public long decode(byte[] buf, int off, int len) {
-		if (off < 0 || len < 0 || off > buf.length - len) {
-			throw new IndexOutOfBoundsException();
+	final int _decode(byte[] src, char[] dest, int off, int len) {
+		int _offset = this.offset;
+		int _limit = this.limit;
+		int availIn = _limit - _offset;
+		if (availIn == 0) {
+			return UNDERFLOW;
 		}
-		int _codePoints = this.codePoints;
-		long _bytes = this.bytes;
-		long _bytesTotal = this.bytesTotal;
-		int offOld = off;
-		int codePointsOld = _codePoints;
-		try {
-			Parser _stop = this.stop;
-			ErrorHandler _err = this.err;
-			//int opLim = this.outputLimit;
-			long _inputLimit = this.inputLimit;
-			// limit to smaller of len and remaining limit
-			int p = _inputLimit < 0L ? len : (int) Math.min(len, _inputLimit - _bytesTotal);
-			// output limited
-			for (int m = off + p; off < m;) {
-				//if (opLim >= 0 && _codePoints >= opLim) {
-				//	// output limit reached
-				//	return 0L;
-				//}
-				final int r;
-				char b = translate(buf[off++]);
-				if (mappable(b)) {
-					put(_codePoints++, b);
-					r = _stop.accept(b, _codePoints);
-				} else {
-					put(_codePoints++, DUMMY);
-					r = _err.apply(_codePoints);
+		int y = off;
+		for (int m = _offset + Math.min(availIn, len); _offset < m;) {
+			char r = convert(src[_offset++]);
+			if (r == NO_DEF) {
+				if (y == off) {
+					this.offset = _offset;
+					return ERROR;
 				}
-				if (r >= 0) {
-					_bytes -= r;
-					_codePoints -= r;
-					codePointsOld -= r;
-					return r;
-				}
+				this.statePending = ERROR;
+				break;
 			}
-			return inputLimitReached(_inputLimit);
-		} finally {
-			this.codePoints = _codePoints;
-			this.codePointsTotal += _codePoints - codePointsOld;
+			dest[y++] = r;
+		}
+		this.offset = _offset;	// update internal state
+		return y - off;
+	}
 
-			int num0 = off - offOld;
-			this.bytes = _bytes + num0;
-			this.bytesTotal = _bytesTotal + num0;
+	@Override
+	final int _decode(byte[] src, Appendable dest, int len) throws UncheckedIOException {
+		int _offset = this.offset;
+		try {
+			int _limit = this.limit;
+			int availIn = _limit - _offset;
+			if (availIn == 0) {
+				return UNDERFLOW;
+			}
+			int y = 0;
+			for (int m = _offset + Math.min(availIn, len); _offset < m;) {
+				char r = convert(src[_offset++]);
+				if (r == NO_DEF) {
+					if (y == 0) {
+						return ERROR;
+					}
+					this.statePending = ERROR;
+					break;
+				}
+				dest.append(r);
+			}
+			return y;
+		} catch (IOException ex) {
+			throw new UncheckedIOException(ex);
+		} finally {
+			this.offset = _offset;
 		}
 	}
 
 	@Override
-	public int chars() {
-		return this.codePoints;
-	}
-
-	@Override
-	public long charsTotal() {
-		return this.codePointsTotal;
-	}
-
-	@Override
-	public int pendingInput() {
+	public final int pendingOutput() {
 		return 0;
-	}
-
-	@Override
-	public Decoder dropPendingInput() {
-		return this;
-	}
-
-	@Override
-	public String result() {
-		return String.valueOf(this.charBuffer, 0, this.codePoints);
 	}
 }

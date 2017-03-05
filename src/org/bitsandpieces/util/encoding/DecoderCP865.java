@@ -9,12 +9,10 @@ package org.bitsandpieces.util.encoding;
  *
  * @author Jan Kebernik
  */
-public class DecoderCP865 extends SingleByteDecoder {
+final class DecoderCP865 extends SingleByteDecoder {
 
 	// table generated from:
 	// http://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/PC/CP865.TXT
-	//
-	// 256
 	private static final char[] TABLE = {
 		0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
 		0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
@@ -51,13 +49,8 @@ public class DecoderCP865 extends SingleByteDecoder {
 	};
 
 	@Override
-	char translate(byte inputByte) {
-		return TABLE[inputByte & 0xFF];
-	}
-
-	@Override
-	boolean mappable(char i) {
-		return true;
+	char convert(byte b) {
+		return TABLE[b & 0xFF];
 	}
 
 	@Override

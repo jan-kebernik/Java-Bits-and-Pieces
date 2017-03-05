@@ -26,6 +26,7 @@ import java.util.logging.Logger;
  */
 public final class Strings {
 
+	// test
 	private static final String FAIL_MESSAGE = "Reflection failed. Falling back on general solution.";
 
 	public static final char NUL = 0;

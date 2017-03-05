@@ -5,9 +5,6 @@
  */
 package org.bitsandpieces.util.encoding;
 
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
-
 /**
  * A character encoding scheme.
  *
@@ -17,182 +14,252 @@ public enum Encoding {
 	/**
 	 * American Standard Code for Information Interchange
 	 */
-	ASCII(StandardCharsets.US_ASCII) {
+	ASCII() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderASCII();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderASCII();
+		}
 	},
 	/**
-	 * 8-Bit Unicode.
+	 * Eight-bit Unicode (or UCS) Transformation Format.
 	 */
-	UTF_8(StandardCharsets.UTF_8) {
+	UTF_8() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderUTF_8();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderUTF_8();
+		}
 	},
 	/**
-	 * Eastern European Code Page.
+	 * Windows Eastern European.
 	 */
-	CP1250(Charset.forName("windows-1250")) {
+	CP1250() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1250();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1250();
+		}
 	},
 	/**
-	 * Russian (Cyrillic) Code Page.
+	 * Windows Cyrillic.
 	 */
-	CP1251(Charset.forName("windows-1251")) {
+	CP1251() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1251();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1251();
+		}
 	},
 	/**
-	 * Central European Code Page.
+	 * Windows Latin-1.
 	 */
-	CP1252(Charset.forName("windows-1252")) {
+	CP1252() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1252();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1252();
+		}
 	},
 	/**
-	 * Greek Code Page.
+	 * Windows Greek.
 	 */
-	CP1253(Charset.forName("windows-1253")) {
+	CP1253() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1253();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1253();
+		}
 	},
 	/**
-	 * Turkish Code Page.
+	 * Windows Turkish.
 	 */
-	CP1254(Charset.forName("windows-1254")) {
+	CP1254() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1254();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1254();
+		}
 	},
 	/**
-	 * Hebrew Code Page.
+	 * Windows Hebrew.
 	 */
-	CP1255(Charset.forName("windows-1255")) {
+	CP1255() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1255();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1255();
+		}
 	},
 	/**
-	 * Arabic Code Page.
+	 * Windows Arabic.
 	 */
-	CP1256(Charset.forName("windows-1256")) {
+	CP1256() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1256();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1256();
+		}
 	},
 	/**
-	 * Baltic Code Page.
+	 * Windows Baltic.
 	 */
-	CP1257(Charset.forName("windows-1257")) {
+	CP1257() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1257();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1257();
+		}
 	},
 	/**
-	 * Vietnamese Code Page.
+	 * Windows Vietnamese.
 	 */
-	CP1258(Charset.forName("windows-1258")) {
+	CP1258() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP1258();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP1258();
+		}
 	},
 	/**
-	 * Thai Code Page.
+	 * Windows Thai.
 	 */
-	CP874(Charset.forName("windows-874")) {
+	CP874() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP874();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP874();
+		}
 	},
 	/**
-	 * Japanese Code Page.
+	 * Windows Japanese.
 	 */
-	CP932(Charset.forName("windows-31j")) {
+	CP932() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP932();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP932();
+		}
 	},
 	/**
-	 * Simplified Chinese Code Page.
+	 * Windows Simplified Chinese.
 	 */
-	CP936(Charset.forName("windows-936")) {
+	CP936() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP936();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP936();
+		}
 	},
 	/**
-	 * Korean Code Page.
+	 * Windows Korean.
 	 */
-	CP949(Charset.forName("windows-949")) {
+	CP949() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP949();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP949();
+		}
 	},
 	/**
-	 * Traditional Chinese Code Page.
+	 * Windows Traditional Chinese.
 	 */
-	CP950(Charset.forName("windows-950")) {
+	CP950() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP950();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP950();
+		}
 	},
 	/**
-	 * Portugese Code Page.
+	 * MS-DOS Portuguese.
 	 */
-	CP860(Charset.forName("IBM860")) {
+	CP860() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderCP860();
 		}
-	},
-	/**
-	 * Nordic (except Iceland) Code Page.
-	 */
-	CP865(Charset.forName("IBM865")) {
 		@Override
-		public Decoder newDecoder() {
-			return new DecoderCP860();
+		public Encoder newEncoder() {
+			return new EncoderCP860();
 		}
 	},
 	/**
-	 * ISO/IEC 8859-1.
+	 * MS-DOS Nordic.
 	 */
-	ISO_8859_1(Charset.forName("ISO-8859-1")) {
+	CP865() {
+		@Override
+		public Decoder newDecoder() {
+			return new DecoderCP865();
+		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderCP865();
+		}
+	},
+	/**
+	 * ISO-8859-1, Latin Alphabet No. 1.
+	 */
+	ISO_8859_1() {
 		@Override
 		public Decoder newDecoder() {
 			return new DecoderISO_8859_1();
 		}
+		@Override
+		public Encoder newEncoder() {
+			return new EncoderISO_8859_1();
+		}
 	};
 
 	public abstract Decoder newDecoder();
-
-	private final Charset charset;
-
-	private Encoding(Charset charset) {
-		this.charset = charset;
-	}
-
-	// TODO decoders
+	
+	public abstract Encoder newEncoder();
 }

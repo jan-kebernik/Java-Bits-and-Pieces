@@ -7,18 +7,14 @@ package org.bitsandpieces.util.encoding;
 
 /**
  *
- * @author Jan Kebernik
+ * @author pp
  */
 final class DecoderASCII extends SingleByteDecoder {
 
 	@Override
-	char translate(byte inputByte) {
-		return (char) (inputByte & 0xff);
-	}
-
-	@Override
-	boolean mappable(char i) {
-		return i < 128;
+	char convert(byte b) {
+		char c = ((char) (b & 0xff));
+		return c < '\u0080' ? c : NO_DEF;
 	}
 
 	@Override

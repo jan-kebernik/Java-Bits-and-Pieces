@@ -309,4 +309,5 @@ public interface PrimitiveCollection<T, T_CONS, T_ITR extends PrimitiveIterator<
 			return c.doubleStream().allMatch(this::containsDouble);
 		}
 	}
+	
 }

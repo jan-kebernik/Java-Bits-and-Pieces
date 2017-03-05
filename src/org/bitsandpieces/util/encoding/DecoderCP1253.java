@@ -13,9 +13,6 @@ final class DecoderCP1253 extends SingleByteDecoder {
 
 	// table generated from:
 	// http://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP1253.TXT
-	private static final char NO_DEF = 0xFFFF;
-
-	// 256
 	private static final char[] TABLE = {
 		0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
 		0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
@@ -52,13 +49,8 @@ final class DecoderCP1253 extends SingleByteDecoder {
 	};
 
 	@Override
-	char translate(byte inputByte) {
-		return TABLE[inputByte & 0xFF];
-	}
-
-	@Override
-	boolean mappable(char i) {
-		return i != NO_DEF;
+	char convert(byte b) {
+		return TABLE[b & 0xFF];
 	}
 
 	@Override

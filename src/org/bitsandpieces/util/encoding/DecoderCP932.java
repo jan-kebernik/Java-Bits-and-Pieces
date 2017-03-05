@@ -7,19 +7,12 @@ package org.bitsandpieces.util.encoding;
 
 /**
  *
- * @author Jan Kebernik
+ * @author pp
  */
 final class DecoderCP932 extends DualByteDecoder {
 
-	// tables generated from:
-	// http://www.unicode.org/Public/MAPPINGS/VENDORS/MICSFT/WINDOWS/CP932.TXT
-	private static final int OFFSET = 0x8140;	// Offset of TABLE1
-
-	private static final char LEAD_B = 0xFFFE;	// DBCS LEAD BYTE
-	private static final char NO_DEF = 0xFFFF;	// UNDEFINED
-
-	// 256
-	private static final char[] TABLE0 = {
+	private static final int OFFSET = 0x8140;
+	private static final char[] SMALL = {
 		0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
 		0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
 		0x0010, 0x0011, 0x0012, 0x0013, 0x0014, 0x0015, 0x0016, 0x0017,
@@ -53,46 +46,9 @@ final class DecoderCP932 extends DualByteDecoder {
 		LEAD_B, LEAD_B, LEAD_B, LEAD_B, LEAD_B, LEAD_B, LEAD_B, LEAD_B,
 		LEAD_B, LEAD_B, LEAD_B, LEAD_B, LEAD_B, NO_DEF, NO_DEF, NO_DEF
 	};
+	private static final char[] BIG = combined();
 
-	// 32448
-	private static final char[] TABLE1 = getTable();
-
-	@Override
-	char getTable0(int index) {
-		return TABLE0[index];
-	}
-
-	@Override
-	char getTable1(int index) {
-		if (index < OFFSET) {
-			return NO_DEF;
-		}
-		return TABLE1[index - OFFSET];
-	}
-
-	@Override
-	boolean isLeadByte(char c) {
-		return LEAD_B == c;
-	}
-
-	@Override
-	boolean hasNoDef(char c) {
-		return NO_DEF == c;
-	}
-
-	@Override
-	public Encoding encoding() {
-		return Encoding.CP932;
-	}
-
-	private static int copyTable(char[] src, char[] dest, int off) {
-		System.arraycopy(src, 0, dest, off, src.length);
-		return src.length;
-	}
-
-	// table definitions must be split, or it won't compile
-	// but don't want to read from file.
-	private static char[] getTable() {
+	private static char[] combined() {
 		int i = 0;
 		char[] t = new char[65536 - OFFSET];
 		i += copyTable(table0(), t, i);
@@ -100,6 +56,30 @@ final class DecoderCP932 extends DualByteDecoder {
 		i += copyTable(table2(), t, i);
 		i += copyTable(table3(), t, i);
 		return t;
+	}
+
+	static final char[] buildConversionTable() {
+		return buildConversionTable(SMALL, BIG, OFFSET);
+	}
+
+	@Override
+	final int tableOffset() {
+		return OFFSET;
+	}
+
+	@Override
+	final char getT0(int i) {
+		return SMALL[i];
+	}
+
+	@Override
+	final char getT1(int i) {
+		return BIG[i];
+	}
+
+	@Override
+	public Encoding encoding() {
+		return Encoding.CP932;
 	}
 
 	private static char[] table0() {
