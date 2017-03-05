@@ -20,8 +20,8 @@ public class StringMaker implements Appendable, CharSequence {
 	private static final char[] EMPTY = {};
 	private static final Format DEFAULT = Formats.DEC;
 
-	private char[] chars;
-	private int size;
+	protected char[] chars;
+	protected int size;
 	private final Target target = new Target();
 
 	public StringMaker() {
