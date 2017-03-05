@@ -8,6 +8,7 @@ package org.bitsandpieces.util;
 import java.util.Objects;
 
 /**
+ * StringBuilder alternative that offers efficient support for {@link Format}s.
  *
  * @author pp
  */
