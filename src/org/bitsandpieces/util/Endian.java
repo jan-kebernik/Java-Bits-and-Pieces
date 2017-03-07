@@ -57,6 +57,11 @@ public enum Endian {
 					(byte) (l >>> 32), (byte) (l >>> 40), (byte) (l >>> 48), (byte) (l >>> 56), buf, off);
 			return this;
 		}
+
+		@Override
+		public Endian other() {
+			return BIG;
+		}
 	},
 	BIG() {
 		@Override
@@ -103,7 +108,14 @@ public enum Endian {
 					(byte) (l >>> 24), (byte) (l >>> 16), (byte) (l >>> 8), (byte) l, buf, off);
 			return this;
 		}
+
+		@Override
+		public Endian other() {
+			return LITTLE;
+		}
 	};
+	
+	public abstract Endian other();
 
 	public abstract char toChar(byte b1, byte b0);
 
