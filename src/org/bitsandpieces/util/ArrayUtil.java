@@ -8,6 +8,8 @@ package org.bitsandpieces.util;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Objects;
+import java.util.function.IntBinaryOperator;
+import java.util.function.LongBinaryOperator;
 import org.bitsandpieces.util.collection.primitive.PrimitiveComparator.BooleanComparator;
 import org.bitsandpieces.util.collection.primitive.PrimitiveComparator.ByteComparator;
 import org.bitsandpieces.util.collection.primitive.PrimitiveComparator.CharComparator;
@@ -470,6 +472,26 @@ public class ArrayUtil {
 		return a;
 	}
 
+	// first arguement to fillFunction is index, second current value
+	public static byte[] fill(byte[] a, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		return _fill(a, 0, a.length, fillFunction);
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static byte[] fill(byte[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _fill(a, fromIndex, toIndex, fillFunction);
+	}
+
+	private static byte[] _fill(byte[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		for (; fromIndex < toIndex; fromIndex++) {
+			a[fromIndex] = (byte) fillFunction.applyAsInt(fromIndex, a[fromIndex]);
+		}
+		return a;
+	}
+
 	public static char[] fill(char[] a, char val) {
 		Arrays.fill(a, val);
 		return a;
@@ -477,6 +499,26 @@ public class ArrayUtil {
 
 	public static char[] fill(char[] a, int fromIndex, int toIndex, char val) {
 		Arrays.fill(a, fromIndex, toIndex, val);
+		return a;
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static char[] fill(char[] a, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		return _fill(a, 0, a.length, fillFunction);
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static char[] fill(char[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _fill(a, fromIndex, toIndex, fillFunction);
+	}
+
+	private static char[] _fill(char[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		for (; fromIndex < toIndex; fromIndex++) {
+			a[fromIndex] = (char) fillFunction.applyAsInt(fromIndex, a[fromIndex]);
+		}
 		return a;
 	}
 
@@ -490,6 +532,26 @@ public class ArrayUtil {
 		return a;
 	}
 
+	// first arguement to fillFunction is index, second current value
+	public static short[] fill(short[] a, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		return _fill(a, 0, a.length, fillFunction);
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static short[] fill(short[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _fill(a, fromIndex, toIndex, fillFunction);
+	}
+
+	private static short[] _fill(short[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		for (; fromIndex < toIndex; fromIndex++) {
+			a[fromIndex] = (short) fillFunction.applyAsInt(fromIndex, a[fromIndex]);
+		}
+		return a;
+	}
+
 	public static int[] fill(int[] a, int val) {
 		Arrays.fill(a, val);
 		return a;
@@ -497,6 +559,26 @@ public class ArrayUtil {
 
 	public static int[] fill(int[] a, int fromIndex, int toIndex, int val) {
 		Arrays.fill(a, fromIndex, toIndex, val);
+		return a;
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static int[] fill(int[] a, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		return _fill(a, 0, a.length, fillFunction);
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static int[] fill(int[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _fill(a, fromIndex, toIndex, fillFunction);
+	}
+
+	private static int[] _fill(int[] a, int fromIndex, int toIndex, IntBinaryOperator fillFunction) {
+		for (; fromIndex < toIndex; fromIndex++) {
+			a[fromIndex] = fillFunction.applyAsInt(fromIndex, a[fromIndex]);
+		}
 		return a;
 	}
 
@@ -517,6 +599,26 @@ public class ArrayUtil {
 
 	public static long[] fill(long[] a, int fromIndex, int toIndex, long val) {
 		Arrays.fill(a, fromIndex, toIndex, val);
+		return a;
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static long[] fill(long[] a, LongBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		return _fill(a, 0, a.length, fillFunction);
+	}
+
+	// first arguement to fillFunction is index, second current value
+	public static long[] fill(long[] a, int fromIndex, int toIndex, LongBinaryOperator fillFunction) {
+		Objects.requireNonNull(fillFunction);
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _fill(a, fromIndex, toIndex, fillFunction);
+	}
+
+	private static long[] _fill(long[] a, int fromIndex, int toIndex, LongBinaryOperator fillFunction) {
+		for (; fromIndex < toIndex; fromIndex++) {
+			a[fromIndex] = fillFunction.applyAsLong(fromIndex, a[fromIndex]);
+		}
 		return a;
 	}
 
@@ -565,11 +667,12 @@ public class ArrayUtil {
 			return "[]";
 		}
 		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
-		sm.append('[').append(a[fromIndex], f);
-		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
-		for (int i = fromIndex + 1; i < toIndex; i++) {
+		sm.append('[');
+		Format f0 = f.suffix(f.suffix() == null ? ", " : f.suffix().concat(", "));
+		for (int i = fromIndex; i < toIndex - 1; i++) {
 			sm.append(a[i], f0);
 		}
+		sm.append(a[toIndex - 1], f);
 		return sm.append(']').toString();
 	}
 
@@ -610,11 +713,12 @@ public class ArrayUtil {
 			return "[]";
 		}
 		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
-		sm.append('[').append(a[fromIndex], f);
-		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
-		for (int i = fromIndex + 1; i < toIndex; i++) {
+		sm.append('[');
+		Format f0 = f.suffix(f.suffix() == null ? ", " : f.suffix().concat(", "));
+		for (int i = fromIndex; i < toIndex - 1; i++) {
 			sm.append(a[i], f0);
 		}
+		sm.append(a[toIndex - 1], f);
 		return sm.append(']').toString();
 	}
 
@@ -643,11 +747,12 @@ public class ArrayUtil {
 			return "[]";
 		}
 		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
-		sm.append('[').append(a[fromIndex], f);
-		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
-		for (int i = fromIndex + 1; i < toIndex; i++) {
+		sm.append('[');
+		Format f0 = f.suffix(f.suffix() == null ? ", " : f.suffix().concat(", "));
+		for (int i = fromIndex; i < toIndex - 1; i++) {
 			sm.append(a[i], f0);
 		}
+		sm.append(a[toIndex - 1], f);
 		return sm.append(']').toString();
 	}
 
@@ -676,11 +781,12 @@ public class ArrayUtil {
 			return "[]";
 		}
 		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
-		sm.append('[').append(a[fromIndex], f);
-		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
-		for (int i = fromIndex + 1; i < toIndex; i++) {
+		sm.append('[');
+		Format f0 = f.suffix(f.suffix() == null ? ", " : f.suffix().concat(", "));
+		for (int i = fromIndex; i < toIndex - 1; i++) {
 			sm.append(a[i], f0);
 		}
+		sm.append(a[toIndex - 1], f);
 		return sm.append(']').toString();
 	}
 
@@ -709,11 +815,12 @@ public class ArrayUtil {
 			return "[]";
 		}
 		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
-		sm.append('[').append(a[fromIndex], f);
-		Format f0 = f.prefix(f.prefix() == null ? ", " : ", ".concat(f.prefix()));
-		for (int i = fromIndex + 1; i < toIndex; i++) {
+		sm.append('[');
+		Format f0 = f.suffix(f.suffix() == null ? ", " : f.suffix().concat(", "));
+		for (int i = fromIndex; i < toIndex - 1; i++) {
 			sm.append(a[i], f0);
 		}
+		sm.append(a[toIndex - 1], f);
 		return sm.append(']').toString();
 	}
 

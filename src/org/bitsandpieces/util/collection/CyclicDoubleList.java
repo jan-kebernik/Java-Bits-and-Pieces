@@ -514,15 +514,18 @@ public class CyclicDoubleList
 
 	@Override
 	public void clear() {
-		try {
+		//try {
 			_failDuringIteration();
-			int s = this._size;
-			if (s != 0) {
-				_remove(s, 0, s);
-			}
-		} catch (ArrayIndexOutOfBoundsException ex) {
-			throw new ConcurrentModificationException();
-		}
+			this._size = 0;
+			this._idx = 0;
+			this._len = 0;
+			//int s = this._size;
+			//if (s != 0) {
+			//	_remove(s, 0, s);
+			//}
+		//} catch (ArrayIndexOutOfBoundsException ex) {
+		//	throw new ConcurrentModificationException();
+		//}
 	}
 
 	@Override

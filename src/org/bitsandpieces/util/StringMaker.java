@@ -605,6 +605,26 @@ public class StringMaker implements Appendable, CharSequence {
 		return this;
 	}
 
+	public void setCharAt(int index, char ch) {
+		if (index < 0 || index >= this.size) {
+			throw new StringIndexOutOfBoundsException(index);
+		}
+		this.chars[index] = ch;
+	}
+
+	public void getChars(int srcBegin, int srcEnd, char[] dst, int dstBegin) {
+		if (srcBegin < 0) {
+			throw new StringIndexOutOfBoundsException(srcBegin);
+		}
+		if (srcEnd < 0 || srcEnd > this.size) {
+			throw new StringIndexOutOfBoundsException(srcEnd);
+		}
+		if (srcBegin > srcEnd) {
+			throw new StringIndexOutOfBoundsException("srcBegin > srcEnd");
+		}
+		System.arraycopy(this.chars, srcBegin, dst, dstBegin, srcEnd - srcBegin);
+	}
+
 	private final class Target implements Format.ArrayTarget {
 
 		@Override
