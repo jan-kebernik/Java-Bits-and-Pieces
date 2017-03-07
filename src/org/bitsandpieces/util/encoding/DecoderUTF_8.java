@@ -615,4 +615,11 @@ final class DecoderUTF_8 extends AbstractDecoder {
 	public Encoding encoding() {
 		return Encoding.UTF_8;
 	}
+	
+	@Override
+	public Decoder reset() {
+		super.reset();
+		this.state = NONE;
+		return this;
+	}
 }

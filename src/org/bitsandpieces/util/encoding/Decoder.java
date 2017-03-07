@@ -35,5 +35,7 @@ public interface Decoder {
 	
 	Decoder feedInput(byte[] src, int off, int len);
 	
-	public Encoding encoding();
+	Encoding encoding();
+	
+	Decoder reset();
 }

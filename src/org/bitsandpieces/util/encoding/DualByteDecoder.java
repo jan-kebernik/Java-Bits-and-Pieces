@@ -185,4 +185,11 @@ abstract class DualByteDecoder extends AbstractDecoder {
 	public int pendingOutput() {
 		return 0;
 	}
+	
+	@Override
+	public Decoder reset() {
+		super.reset();
+		this.leadPending = NONE;
+		return this;
+	}
 }

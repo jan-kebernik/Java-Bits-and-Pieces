@@ -145,4 +145,11 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 	public final int pendingOutput() {
 		return 0;
 	}
+	
+	@Override
+	public Encoder reset() {
+		super.reset();
+		this.surr = NONE;
+		return this;
+	}
 }

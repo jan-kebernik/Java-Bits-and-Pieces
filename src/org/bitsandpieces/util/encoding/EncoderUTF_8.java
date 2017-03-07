@@ -16,7 +16,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 	private int numBytesPending;
 	private int bytesPending;
 	private char highSurrogate = NONE;
-	
+
 	@Override
 	int _encode(char[] src, byte[] buf, int off, int len) {
 		int _offset = this.offset;
@@ -439,5 +439,13 @@ final class EncoderUTF_8 extends AbstractEncoder {
 	@Override
 	public Encoding encoding() {
 		return Encoding.UTF_8;
+	}
+
+	@Override
+	public Encoder reset() {
+		super.reset();
+		this.numBytesPending = this.bytesPending = 0;
+		this.highSurrogate = NONE;
+		return this;
 	}
 }

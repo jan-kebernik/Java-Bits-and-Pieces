@@ -105,4 +105,12 @@ abstract class AbstractDecoder implements Decoder {
 		this.limit = off + len;
 		return this;
 	}
+	
+	@Override
+	public Decoder reset() {
+		this.src = EMPTY;
+		this.offset = this.limit = 0;
+		this.statePending = 0;
+		return this;
+	}
 }

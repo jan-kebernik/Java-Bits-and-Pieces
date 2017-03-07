@@ -33,5 +33,7 @@ public interface Encoder {
 
 	Encoder feedInput(char[] src, int off, int len);
 	
-	public Encoding encoding();
+	Encoding encoding();
+	
+	Encoder reset();
 }

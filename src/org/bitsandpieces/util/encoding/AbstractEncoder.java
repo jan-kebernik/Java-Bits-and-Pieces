@@ -113,4 +113,13 @@ abstract class AbstractEncoder implements Encoder {
 		this.limit = off + len;
 		return this;
 	}
+	
+	@Override
+	public Encoder reset() {
+		this.inArr = EMPTY;
+		this.inSeq = null;
+		this.offset = this.limit = 0;
+		this.statePending = 0;
+		return this;
+	}
 }

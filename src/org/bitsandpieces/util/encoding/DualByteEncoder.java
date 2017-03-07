@@ -172,4 +172,12 @@ abstract class DualByteEncoder extends AbstractEncoder {
 		// always 0 or 1 byte is pending
 		return this.bytePending >>> 31;
 	}
+	
+	@Override
+	public Encoder reset() {
+		super.reset();
+		this.surr = NONE;
+		this.bytePending = 0;
+		return this;
+	}
 }
