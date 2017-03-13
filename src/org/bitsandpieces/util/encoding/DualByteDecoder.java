@@ -60,11 +60,12 @@ abstract class DualByteDecoder extends AbstractDecoder {
 	abstract char getT1(int i);
 
 	@Override
-	int _decode(byte[] src, char[] dest, int off, int len) {
-		int _offset = this.offset;
+	final int _decode(byte[] src, char[] dest, int off, int len, int numCodePoints) {
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		int _limit = this.limit;
 		if (_offset == _limit) {
-			return UNDERFLOW;
+			return Encoding.UNDERFLOW;
 		}
 		int y = off;
 		int p = this.leadPending;
@@ -72,18 +73,16 @@ abstract class DualByteDecoder extends AbstractDecoder {
 			int i = ((p << 8) | (src[_offset] & 0xff)) - this.tableOffset();
 			this.leadPending = NONE;
 			if (i < 0) {
-				this.offset = _offset;
-				return ERROR;
+				return Encoding.ERROR;
 			}
 			char c = this.getT1(i);
 			if (c == NO_DEF) {
-				this.offset = _offset;
-				return ERROR;
+				return Encoding.ERROR;
 			}
 			_offset++;	// only consume on successful resolution
 			dest[y++] = c;
 		}
-		for (int m = off + len; _offset < _limit && y < m;) {
+		for (int m = off + Math.min(len, numCodePoints); _offset < _limit && y < m;) {
 			int b = src[_offset++] & 0xff;
 			char c0 = this.getT0(b);
 			if (c0 != NO_DEF) {
@@ -94,7 +93,7 @@ abstract class DualByteDecoder extends AbstractDecoder {
 				if (_offset == _limit) {
 					this.leadPending = b;
 					if (y == off) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					break;
 				}
@@ -109,23 +108,28 @@ abstract class DualByteDecoder extends AbstractDecoder {
 				}
 			}
 			if (y == off) {
+				this.bytes += (_offset - _offsetOld);
 				this.offset = _offset;
-				return ERROR;
+				return Encoding.ERROR;
 			}
-			this.statePending = ERROR;
+			this.statePending = Encoding.ERROR;
 			break;
 		}
+		this.bytes += (_offset - _offsetOld);
 		this.offset = _offset;
-		return y - off;
+		int n = y - off;
+		this.codePoints += n;
+		return n;
 	}
 
 	@Override
-	int _decode(byte[] src, Appendable dest, int len) throws UncheckedIOException {
-		int _offset = this.offset;
+	final int _decode(byte[] src, Appendable dest, int len, int numCodePoints) throws UncheckedIOException {
 		try {
+			int _offsetOld = this.offset;
+			int _offset = _offsetOld;
 			int _limit = this.limit;
 			if (_offset == _limit) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			int y = 0;
 			int p = this.leadPending;
@@ -133,27 +137,29 @@ abstract class DualByteDecoder extends AbstractDecoder {
 				int i = ((p << 8) | (src[_offset] & 0xff)) - this.tableOffset();
 				this.leadPending = NONE;
 				if (i < 0) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
 				char c = this.getT1(i);
 				if (c == NO_DEF) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
 				_offset++;	// only consume on successful resolution
 				dest.append(c);
+				y++;
 			}
-			for (; _offset < _limit && y < len;) {
+			for (int m = Math.min(len, numCodePoints); _offset < _limit && y < m;) {
 				int b = src[_offset++] & 0xff;
 				char c0 = this.getT0(b);
 				if (c0 != NO_DEF) {
 					if (c0 != LEAD_B) {
 						dest.append(c0);
+						y++;
 						continue;
 					}
 					if (_offset == _limit) {
 						this.leadPending = b;
 						if (y == 0) {
-							return UNDERFLOW;
+							return Encoding.UNDERFLOW;
 						}
 						break;
 					}
@@ -163,33 +169,47 @@ abstract class DualByteDecoder extends AbstractDecoder {
 						if (c1 != NO_DEF) {
 							_offset++;	// only consume on successful resolution
 							dest.append(c1);
+							y++;
 							continue;
 						}
 					}
 				}
 				if (y == 0) {
-					return ERROR;
+					this.bytes += (_offset - _offsetOld);
+					this.offset = _offset;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
+				this.statePending = Encoding.ERROR;
 				break;
 			}
+			this.bytes += (_offset - _offsetOld);
+			this.offset = _offset;
+			this.codePoints += y;
 			return y;
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
-		} finally {
-			this.offset = _offset;
 		}
 	}
 
 	@Override
-	public int pendingOutput() {
+	public final int pendingOutput() {
 		return 0;
 	}
-	
+
 	@Override
 	public Decoder reset() {
 		super.reset();
 		this.leadPending = NONE;
 		return this;
+	}
+
+	@Override
+	public final int needsInput() {
+		return this.leadPending != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int pendingInput() {
+		return this.leadPending != NONE ? 1 : 0;
 	}
 }

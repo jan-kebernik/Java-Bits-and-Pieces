@@ -20,21 +20,22 @@ abstract class DualByteEncoder extends AbstractEncoder {
 	abstract char get(int i);
 
 	@Override
-	int _encode(char[] src, byte[] buf, int off, int len) {
+	int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
+		int _numCP = 0;
 		int _offset = this.offset;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
 			// have a high surrogate waiting
 			if (_offset == _limit) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			this.surr = NONE;
 			if (Character.isLowSurrogate(src[_offset])) {
 				// two-char error
 				this.offset = ++_offset;
 			}
-			return ERROR;
+			return Encoding.ERROR;
 		}
 		int y = off;
 		int m = off + len;
@@ -42,8 +43,9 @@ abstract class DualByteEncoder extends AbstractEncoder {
 		if (p != 0) {
 			buf[y++] = (byte) (p & 0xff);
 			this.bytePending = 0;
+			_numCP++;
 		}
-		for (; _offset < _limit && y < m;) {
+		for (; _offset < _limit && y < m && _numCP < numCodePoints;) {
 			char c = src[_offset++];
 			char r = get(c);
 			if (r == DualByteDecoder.NO_DEF) {
@@ -53,7 +55,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 						this.surr = c;
 						this.offset = _offset;
 						if (y == off) {
-							return UNDERFLOW;
+							return Encoding.UNDERFLOW;
 						}
 						return y - off;
 					}
@@ -65,15 +67,16 @@ abstract class DualByteEncoder extends AbstractEncoder {
 				this.offset = _offset;	// update internal state
 				if (y == off) {
 					// no bytes produced yet
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
+				this.statePending = Encoding.ERROR;
 				return y - off;
 			}
 			int lead = r >>> 8;
 			if (lead == 0) {
 				// one byte
 				buf[y++] = (byte) r;
+				_numCP++;
 				continue;
 			}
 			// two bytes
@@ -85,30 +88,32 @@ abstract class DualByteEncoder extends AbstractEncoder {
 				return y - off;
 			}
 			buf[y++] = (byte) trail;
+			_numCP++;
 		}
 		this.offset = _offset;	// update internal state
 		if (_offset == _limit && y == off) {
-			return UNDERFLOW;
+			return Encoding.UNDERFLOW;
 		}
 		return y - off;
 	}
 
 	@Override
-	int _encode(CharSequence src, byte[] buf, int off, int len) {
+	int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
+		int _numCP = 0;
 		int _offset = this.offset;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
 			// have a high surrogate waiting
 			if (_offset == _limit) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			this.surr = NONE;
 			if (Character.isLowSurrogate(src.charAt(_offset))) {
 				// two-char error
 				this.offset = ++_offset;
 			}
-			return ERROR;
+			return Encoding.ERROR;
 		}
 		int y = off;
 		int m = off + len;
@@ -116,8 +121,9 @@ abstract class DualByteEncoder extends AbstractEncoder {
 		if (p != 0) {
 			buf[y++] = (byte) (p & 0xff);
 			this.bytePending = 0;
+			_numCP++;
 		}
-		for (; _offset < _limit && y < m;) {
+		for (; _offset < _limit && y < m && _numCP < numCodePoints;) {
 			char c = src.charAt(_offset++);
 			char r = get(c);
 			if (r == DualByteDecoder.NO_DEF) {
@@ -127,7 +133,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 						this.surr = c;
 						this.offset = _offset;
 						if (y == off) {
-							return UNDERFLOW;
+							return Encoding.UNDERFLOW;
 						}
 						return y - off;
 					}
@@ -139,15 +145,16 @@ abstract class DualByteEncoder extends AbstractEncoder {
 				this.offset = _offset;	// update internal state
 				if (y == off) {
 					// no bytes produced yet
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
+				this.statePending = Encoding.ERROR;
 				return y - off;
 			}
 			int lead = r >>> 8;
 			if (lead == 0) {
 				// one byte
 				buf[y++] = (byte) r;
+				_numCP++;
 				continue;
 			}
 			// two bytes
@@ -159,10 +166,11 @@ abstract class DualByteEncoder extends AbstractEncoder {
 				return y - off;
 			}
 			buf[y++] = (byte) trail;
+			_numCP++;
 		}
 		this.offset = _offset;	// update internal state
 		if (_offset == _limit && y == off) {
-			return UNDERFLOW;
+			return Encoding.UNDERFLOW;
 		}
 		return y - off;
 	}
@@ -172,12 +180,22 @@ abstract class DualByteEncoder extends AbstractEncoder {
 		// always 0 or 1 byte is pending
 		return this.bytePending >>> 31;
 	}
-	
+
 	@Override
 	public Encoder reset() {
 		super.reset();
 		this.surr = NONE;
 		this.bytePending = 0;
 		return this;
+	}
+
+	@Override
+	public final int pendingInput() {
+		return this.surr != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int needsInput() {
+		return this.surr != NONE ? 1 : 0;
 	}
 }

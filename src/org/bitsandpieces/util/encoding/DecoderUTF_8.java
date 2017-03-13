@@ -36,8 +36,10 @@ final class DecoderUTF_8 extends AbstractDecoder {
 	}
 
 	@Override
-	int _decode(byte[] src, char[] dest, int off, int len) {
-		int _offset = this.offset;
+	int _decode(byte[] src, char[] dest, int off, int len, int numCodePoints) {
+		int _numCP = 0;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		try {
 			int _limit = this.limit;
 			int y = off;
@@ -50,25 +52,26 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case TWO_NEED_ONE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b1 = src[_offset];
 					this.state = NONE;
 					if (!continuation(b1)) {
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					dest[y++] = (char) ((this.byte0 << 6) ^ b1 ^ 0xf80);
+					_numCP++;
 					break;
 				}
 				case THREE_NEED_TWO: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b1 = src[_offset];
 					if (!continuation(b1)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					this.byte1 = b1;
@@ -77,29 +80,30 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case THREE_NEED_ONE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					this.state = NONE;
 					int b2 = src[_offset];
 					if (!continuation(b2)) {
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					char cp = (char) ((this.byte0 << 12) ^ (this.byte1 << 6) ^ b2 ^ 0xfffe1f80);
 					if (Character.isSurrogate(cp)) {
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					dest[y++] = cp;
+					_numCP++;
 					break;
 				}
 				case FOUR_NEED_THREE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b1 = src[_offset];
 					if (!continuation(b1)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					this.byte1 = b1;
@@ -108,12 +112,12 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case FOUR_NEED_TWO: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b2 = src[_offset];
 					if (!continuation(b2)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					this.byte2 = b2;
@@ -122,18 +126,18 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case FOUR_NEED_ONE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b3 = src[_offset];
 					if (!continuation(b3)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					int cp = (this.byte0 << 18) ^ (this.byte1 << 12) ^ (this.byte2 << 6) ^ b3 ^ 0x00381f80;
 					if (!Character.isSupplementaryCodePoint(cp)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					dest[y++] = Character.highSurrogate(cp);
 					if (y == m) {
@@ -142,10 +146,12 @@ final class DecoderUTF_8 extends AbstractDecoder {
 						return 1;
 					}
 					dest[y++] = Character.lowSurrogate(cp);
+					_numCP++;
 					break;
 				}
 				case LOW_SURROGATE: {
 					dest[y++] = this.surr;
+					_numCP++;
 					this.state = NONE;
 				}
 				default: {
@@ -153,11 +159,12 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 			}
 			// fast loop
-			for (int maxIn = _limit - 3, maxOut = m - 1; _offset < maxIn && y < maxOut;) {
+			for (int maxIn = _limit - 3, maxOut = m - 1; _offset < maxIn && y < maxOut && _numCP < numCodePoints;) {
 				int b0 = src[_offset++];
 				if (b0 >= 0) {
 					// 1 byte, 7 bits	0xxxxxxx
 					dest[y++] = (char) b0;
+					_numCP++;
 					continue;
 				} else if ((b0 >> 5) == -2 && (b0 & 0x1e) != 0) {
 					// 2 bytes, 11 bits	110xxxxx 10xxxxxx
@@ -165,6 +172,7 @@ final class DecoderUTF_8 extends AbstractDecoder {
 					if (continuation(b1)) {
 						_offset++;
 						dest[y++] = (char) ((b0 << 6) ^ b1 ^ 0xf80);
+						_numCP++;
 						continue;
 					}
 					// malformed
@@ -179,6 +187,7 @@ final class DecoderUTF_8 extends AbstractDecoder {
 								char cp = (char) ((b0 << 12) ^ (b1 << 6) ^ b2 ^ 0xfffe1f80);
 								if (!Character.isSurrogate(cp)) {
 									dest[y++] = cp;
+									_numCP++;
 									continue;
 								}
 							}
@@ -198,6 +207,7 @@ final class DecoderUTF_8 extends AbstractDecoder {
 								if (Character.isSupplementaryCodePoint(cp)) {
 									dest[y++] = Character.highSurrogate(cp);
 									dest[y++] = Character.lowSurrogate(cp);
+									_numCP++;
 									continue;
 								}
 							}
@@ -207,17 +217,18 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				// malformed
 				if (y == off) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
+				this.statePending = Encoding.ERROR;
 				return y - off;
 			}
 			// slow remainder loop
-			for (; _offset < _limit && y < m;) {
+			for (; _offset < _limit && y < m && _numCP < numCodePoints;) {
 				int b0 = src[_offset++];
 				if (b0 >= 0) {
 					// 1 byte, 7 bits	0xxxxxxx
 					dest[y++] = (char) b0;
+					_numCP++;
 					continue;
 				} else if ((b0 >> 5) == -2 && (b0 & 0x1e) != 0) {
 					// 2 bytes, 11 bits	110xxxxx	10xxxxxx
@@ -230,6 +241,7 @@ final class DecoderUTF_8 extends AbstractDecoder {
 					if (continuation(b1)) {
 						_offset++;
 						dest[y++] = (char) ((b0 << 6) ^ b1 ^ 0xf80);
+						_numCP++;
 						continue;
 					}
 					// malformed
@@ -255,6 +267,7 @@ final class DecoderUTF_8 extends AbstractDecoder {
 								char cp = (char) ((b0 << 12) ^ (b1 << 6) ^ b2 ^ 0xfffe1f80);
 								if (!Character.isSurrogate(cp)) {
 									dest[y++] = cp;
+									_numCP++;
 									continue;
 								}
 							}
@@ -297,6 +310,7 @@ final class DecoderUTF_8 extends AbstractDecoder {
 										break;
 									}
 									dest[y++] = Character.lowSurrogate(cp);
+									_numCP++;
 									continue;
 								}
 							}
@@ -306,23 +320,27 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				// malformed
 				if (y == off) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
+				this.statePending = Encoding.ERROR;
 				return y - off;
 			}
 			if (_offset == _limit && y == off) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			return y - off;
 		} finally {
+			this.bytes += (_offset - _offsetOld);
 			this.offset = _offset;
+			this.codePoints += _numCP;
 		}
 	}
 
 	@Override
-	int _decode(byte[] src, Appendable dest, int len) throws UncheckedIOException {
-		int _offset = this.offset;
+	int _decode(byte[] src, Appendable dest, int len, int numCodePoints) throws UncheckedIOException {
+		int _numCP = 0;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		try {
 			int _limit = this.limit;
 			int y = 0;
@@ -334,25 +352,27 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case TWO_NEED_ONE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b1 = src[_offset];
 					this.state = NONE;
 					if (!continuation(b1)) {
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					dest.append((char) ((this.byte0 << 6) ^ b1 ^ 0xf80));
+					y++;
+					_numCP++;
 					break;
 				}
 				case THREE_NEED_TWO: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b1 = src[_offset];
 					if (!continuation(b1)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					this.byte1 = b1;
@@ -361,29 +381,31 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case THREE_NEED_ONE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					this.state = NONE;
 					int b2 = src[_offset];
 					if (!continuation(b2)) {
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					char cp = (char) ((this.byte0 << 12) ^ (this.byte1 << 6) ^ b2 ^ 0xfffe1f80);
 					if (Character.isSurrogate(cp)) {
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					dest.append(cp);
+					y++;
+					_numCP++;
 					break;
 				}
 				case FOUR_NEED_THREE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b1 = src[_offset];
 					if (!continuation(b1)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					this.byte1 = b1;
@@ -392,12 +414,12 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case FOUR_NEED_TWO: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b2 = src[_offset];
 					if (!continuation(b2)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					this.byte2 = b2;
@@ -406,30 +428,35 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				case FOUR_NEED_ONE: {
 					if (_offset == _limit) {
-						return UNDERFLOW;
+						return Encoding.UNDERFLOW;
 					}
 					int b3 = src[_offset];
 					if (!continuation(b3)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					_offset++;
 					int cp = (this.byte0 << 18) ^ (this.byte1 << 12) ^ (this.byte2 << 6) ^ b3 ^ 0x00381f80;
 					if (!Character.isSupplementaryCodePoint(cp)) {
 						this.state = NONE;
-						return ERROR;
+						return Encoding.ERROR;
 					}
 					dest.append(Character.highSurrogate(cp));
+					y++;
 					if (y == len) {
 						this.state = LOW_SURROGATE;
 						this.surr = Character.lowSurrogate(cp);
 						return 1;
 					}
 					dest.append(Character.lowSurrogate(cp));
+					y++;
+					_numCP++;
 					break;
 				}
 				case LOW_SURROGATE: {
 					dest.append(this.surr);
+					y++;
+					_numCP++;
 					this.state = NONE;
 				}
 				default: {
@@ -437,11 +464,13 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 			}
 			// fast loop
-			for (int maxIn = _limit - 3, maxOut = len - 1; _offset < maxIn && y < maxOut;) {
+			for (int maxIn = _limit - 3, maxOut = len - 1; _offset < maxIn && y < maxOut && _numCP < numCodePoints;) {
 				int b0 = src[_offset++];
 				if (b0 >= 0) {
 					// 1 byte, 7 bits	0xxxxxxx
 					dest.append((char) b0);
+					y++;
+					_numCP++;
 					continue;
 				} else if ((b0 >> 5) == -2 && (b0 & 0x1e) != 0) {
 					// 2 bytes, 11 bits	110xxxxx 10xxxxxx
@@ -449,6 +478,8 @@ final class DecoderUTF_8 extends AbstractDecoder {
 					if (continuation(b1)) {
 						_offset++;
 						dest.append((char) ((b0 << 6) ^ b1 ^ 0xf80));
+						y++;
+						_numCP++;
 						continue;
 					}
 					// malformed
@@ -463,6 +494,8 @@ final class DecoderUTF_8 extends AbstractDecoder {
 								char cp = (char) ((b0 << 12) ^ (b1 << 6) ^ b2 ^ 0xfffe1f80);
 								if (!Character.isSurrogate(cp)) {
 									dest.append(cp);
+									y++;
+									_numCP++;
 									continue;
 								}
 							}
@@ -481,7 +514,10 @@ final class DecoderUTF_8 extends AbstractDecoder {
 								int cp = (b0 << 18) ^ (b1 << 12) ^ (b2 << 6) ^ b3 ^ 0x00381f80;
 								if (Character.isSupplementaryCodePoint(cp)) {
 									dest.append(Character.highSurrogate(cp));
+									y++;
 									dest.append(Character.lowSurrogate(cp));
+									y++;
+									_numCP++;
 									continue;
 								}
 							}
@@ -491,17 +527,19 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				// malformed
 				if (y == 0) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
+				this.statePending = Encoding.ERROR;
 				return y;
 			}
 			// slow remainder loop
-			for (; _offset < _limit && y < len;) {
+			for (; _offset < _limit && y < len && _numCP < numCodePoints;) {
 				int b0 = src[_offset++];
 				if (b0 >= 0) {
 					// 1 byte, 7 bits	0xxxxxxx
 					dest.append((char) b0);
+					y++;
+					_numCP++;
 					continue;
 				} else if ((b0 >> 5) == -2 && (b0 & 0x1e) != 0) {
 					// 2 bytes, 11 bits	110xxxxx	10xxxxxx
@@ -514,6 +552,8 @@ final class DecoderUTF_8 extends AbstractDecoder {
 					if (continuation(b1)) {
 						_offset++;
 						dest.append((char) ((b0 << 6) ^ b1 ^ 0xf80));
+						y++;
+						_numCP++;
 						continue;
 					}
 					// malformed
@@ -539,6 +579,8 @@ final class DecoderUTF_8 extends AbstractDecoder {
 								char cp = (char) ((b0 << 12) ^ (b1 << 6) ^ b2 ^ 0xfffe1f80);
 								if (!Character.isSurrogate(cp)) {
 									dest.append(cp);
+									y++;
+									_numCP++;
 									continue;
 								}
 							}
@@ -575,12 +617,15 @@ final class DecoderUTF_8 extends AbstractDecoder {
 								int cp = (b0 << 18) ^ (b1 << 12) ^ (b2 << 6) ^ b3 ^ 0x00381f80;
 								if (Character.isSupplementaryCodePoint(cp)) {
 									dest.append(Character.highSurrogate(cp));
+									y++;
 									if (y == len) {
 										this.surr = Character.lowSurrogate(cp);
 										this.state = LOW_SURROGATE;
 										break;
 									}
 									dest.append(Character.lowSurrogate(cp));
+									y++;
+									_numCP++;
 									continue;
 								}
 							}
@@ -590,19 +635,21 @@ final class DecoderUTF_8 extends AbstractDecoder {
 				}
 				// malformed
 				if (y == 0) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
+				this.statePending = Encoding.ERROR;
 				return y;
 			}
 			if (_offset == _limit && y == 0) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			return y;
 		} catch (IOException ex) {
 			throw new UncheckedIOException(ex);
 		} finally {
+			this.bytes += (_offset - _offsetOld);
 			this.offset = _offset;
+			this.codePoints += _numCP;
 		}
 	}
 
@@ -615,11 +662,53 @@ final class DecoderUTF_8 extends AbstractDecoder {
 	public Encoding encoding() {
 		return Encoding.UTF_8;
 	}
-	
+
 	@Override
 	public Decoder reset() {
 		super.reset();
 		this.state = NONE;
 		return this;
+	}
+
+	@Override
+	public int pendingInput() {
+		int s = this.state;
+		switch (s) {
+			case TWO_NEED_ONE:
+				return 1;
+			case THREE_NEED_TWO:
+				return 1;
+			case THREE_NEED_ONE:
+				return 2;
+			case FOUR_NEED_THREE:
+				return 1;
+			case FOUR_NEED_TWO:
+				return 2;
+			case FOUR_NEED_ONE:
+				return 3;
+			default:
+				return 0;
+		}
+	}
+
+	@Override
+	public int needsInput() {
+		int s = this.state;
+		switch (s) {
+			case TWO_NEED_ONE:
+				return 1;
+			case THREE_NEED_TWO:
+				return 2;
+			case THREE_NEED_ONE:
+				return 1;
+			case FOUR_NEED_THREE:
+				return 3;
+			case FOUR_NEED_TWO:
+				return 2;
+			case FOUR_NEED_ONE:
+				return 1;
+			default:
+				return 0;
+		}
 	}
 }

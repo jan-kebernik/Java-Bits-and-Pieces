@@ -26,24 +26,24 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 	private char surr = NONE;
 
 	@Override
-	final int _encode(char[] src, byte[] buf, int off, int len) {
+	final int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
 		int _offset = this.offset;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
 			// have a high surrogate waiting
 			if (_offset == _limit) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			this.surr = NONE;
 			if (Character.isLowSurrogate(src[_offset])) {
 				// two-char error
 				this.offset = ++_offset;
 			}
-			return ERROR;
+			return Encoding.ERROR;
 		}
 		int y = off;
-		int m = off + len;
+		int m = off + Math.min(len, numCodePoints);
 		for (; _offset < _limit && y < m;) {
 			char c = src[_offset++];
 			if (isInDirectRange(c)) {
@@ -58,9 +58,11 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 						this.surr = c;
 						this.offset = _offset;
 						if (y == off) {
-							return UNDERFLOW;
+							return Encoding.UNDERFLOW;
 						}
-						return y - off;
+						int n = y - off;
+						this.codePoints += n;
+						return n;
 					}
 					if (Character.isLowSurrogate(src[_offset])) {
 						// two-char error
@@ -69,39 +71,43 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 				}
 				this.offset = _offset;
 				if (y == off) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
-				return y - off;
+				this.statePending = Encoding.ERROR;
+				int n = y - off;
+				this.codePoints += n;
+				return n;
 			}
 			buf[y++] = (byte) (r & 0xff);
 		}
 		this.offset = _offset;
 		if (_offset == _limit && y == off) {
-			return UNDERFLOW;
+			return Encoding.UNDERFLOW;
 		}
-		return y - off;
+		int n = y - off;
+		this.codePoints += n;
+		return n;
 	}
 
 	@Override
-	final int _encode(CharSequence src, byte[] buf, int off, int len) {
+	final int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
 		int _offset = this.offset;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
 			// have a high surrogate waiting
 			if (_offset == _limit) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			this.surr = NONE;
 			if (Character.isLowSurrogate(src.charAt(_offset))) {
 				// two-char error
 				this.offset = ++_offset;
 			}
-			return ERROR;
+			return Encoding.ERROR;
 		}
 		int y = off;
-		int m = off + len;
+		int m = off + Math.min(len, numCodePoints);
 		for (; _offset < _limit && y < m;) {
 			char c = src.charAt(_offset++);
 			if (isInDirectRange(c)) {
@@ -116,9 +122,11 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 						this.surr = c;
 						this.offset = _offset;
 						if (y == off) {
-							return UNDERFLOW;
+							return Encoding.UNDERFLOW;
 						}
-						return y - off;
+						int n = y - off;
+						this.codePoints += n;
+						return n;
 					}
 					if (Character.isLowSurrogate(src.charAt(_offset))) {
 						// two-char error
@@ -127,29 +135,43 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 				}
 				this.offset = _offset;
 				if (y == off) {
-					return ERROR;
+					return Encoding.ERROR;
 				}
-				this.statePending = ERROR;
-				return y - off;
+				this.statePending = Encoding.ERROR;
+				int n = y - off;
+				this.codePoints += n;
+				return n;
 			}
 			buf[y++] = (byte) (r & 0xff);
 		}
 		this.offset = _offset;
 		if (_offset == _limit && y == off) {
-			return UNDERFLOW;
+			return Encoding.UNDERFLOW;
 		}
-		return y - off;
+		int n = y - off;
+		this.codePoints += n;
+		return n;
 	}
 
 	@Override
 	public final int pendingOutput() {
 		return 0;
 	}
-	
+
 	@Override
 	public Encoder reset() {
 		super.reset();
 		this.surr = NONE;
 		return this;
+	}
+
+	@Override
+	public final int pendingInput() {
+		return this.surr != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int needsInput() {
+		return this.surr != NONE ? 1 : 0;
 	}
 }

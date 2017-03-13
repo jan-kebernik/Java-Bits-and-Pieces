@@ -21,39 +21,51 @@ abstract class AbstractEncoder implements Encoder {
 	protected int offset, limit;
 
 	protected int statePending;	// 0 or ERROR
+	protected long codePoints;
 
-	abstract int _encode(char[] src, byte[] buf, int off, int len);
+	abstract int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints);
 
-	abstract int _encode(CharSequence src, byte[] buf, int off, int len);
+	abstract int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints);
 	
-	private int _encode(byte[] buf, int off, int len) {
-		int s = this.statePending;
-		if (s != 0) {
-			this.statePending = 0;
-			return s;
-		}
-		if (len == 0) {
-			return 0;
-		}
+	private int _encode(byte[] buf, int off, int len, int numCodePoints) {
 		char[] in = this.inArr;
 		return in != null 
-				? _encode(in, buf, off, len) 
-				: _encode(this.inSeq, buf, off, len);
+				? _encode(in, buf, off, len, numCodePoints) 
+				: _encode(this.inSeq, buf, off, len, numCodePoints);
 	}
 
 	@Override
 	public final int encode(byte[] buf) {
 		Objects.requireNonNull(buf);
-		return _encode(buf, 0, buf.length);
+		int s = this.statePending;
+		if (s != 0) {
+			this.statePending = 0;
+			return s;
+		}
+		if (buf.length == 0) {
+			return 0;
+		}
+		return _encode(buf, 0, buf.length, Integer.MAX_VALUE);
 	}
 
 	@Override
-	public final int encode(byte[] buf, int off, int len) {
+	public final int encode(byte[] buf, int off, int len, int numCodePoints) {
 		Objects.requireNonNull(buf);
 		if (off < 0 || len < 0 || off > buf.length - len) {
 			throw new IndexOutOfBoundsException();
 		}
-		return _encode(buf, off, len);
+		if (numCodePoints < 0) {
+			throw new IllegalArgumentException("numCodePoints < 0:" + numCodePoints);
+		}
+		int s = this.statePending;
+		if (s != 0) {
+			this.statePending = 0;
+			return s;
+		}
+		if (len == 0 || numCodePoints == 0) {
+			return 0;
+		}
+		return _encode(buf, off, len, numCodePoints);
 	}
 
 	@Override
@@ -116,10 +128,26 @@ abstract class AbstractEncoder implements Encoder {
 	
 	@Override
 	public Encoder reset() {
+		dropInput();
+		this.statePending = 0;
+		return this;
+	}
+
+	@Override
+	public final Encoder dropInput() {
 		this.inArr = EMPTY;
 		this.inSeq = null;
 		this.offset = this.limit = 0;
-		this.statePending = 0;
 		return this;
+	}
+
+	@Override
+	public int inputRemaining() {
+		return this.limit - this.offset;
+	}
+
+	@Override
+	public final long codePoints() {
+		return this.codePoints;
 	}
 }

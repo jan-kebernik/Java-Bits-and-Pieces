@@ -18,7 +18,8 @@ final class EncoderUTF_8 extends AbstractEncoder {
 	private char highSurrogate = NONE;
 
 	@Override
-	int _encode(char[] src, byte[] buf, int off, int len) {
+	int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
+		int _numCP = 0;
 		int _offset = this.offset;
 		int _limit = this.limit;
 		int y = off;
@@ -28,7 +29,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			// have a high surrogate waiting. 
 			// cannot have pending output (code point unresolved)
 			if (_offset >= _limit) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			// have at least one input char available
 			// have at least one output byte available
@@ -36,7 +37,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			char c = src[_offset];
 			if (!Character.isLowSurrogate(c)) {
 				// cannot resolve current code point
-				return ERROR;	// have not produced any output yet
+				return Encoding.ERROR;	// have not produced any output yet
 			}
 			// can resolve code point
 			_offset++;	// only consume next char on successful resolution
@@ -64,12 +65,13 @@ final class EncoderUTF_8 extends AbstractEncoder {
 				return 3;
 			}
 			buf[y++] = (byte) b3;
+			_numCP++;
 		} else {
 			// may have output pending
 			int np = this.numBytesPending;
 			if (np == 0) {
 				if (_offset == _limit) {
-					return UNDERFLOW;
+					return Encoding.UNDERFLOW;
 				}
 			} else {
 				// have at least 1 ouputbut byte available
@@ -86,21 +88,24 @@ final class EncoderUTF_8 extends AbstractEncoder {
 				} while (np != 0);
 				this.numBytesPending = 0;
 				this.bytesPending = 0;
+				_numCP++;
 			}
 		}
 		// have neither a high surrogate waiting, nor any pending output
 		// optimized loop without internal bounds checks or handling of pending output
-		for (int maxIn = _limit - 1, maxOut = m - 3; _offset < maxIn && y < maxOut;) {
+		for (int maxIn = _limit - 1, maxOut = m - 3; _offset < maxIn && y < maxOut && _numCP < numCodePoints;) {
 			char c = src[_offset++];
 			if (c < '\u0080') {
 				// 1 byte, 7 bits
 				buf[y++] = (byte) c;
+				_numCP++;
 				continue;
 			}
 			if (c < '\u0800') {
 				// 2 bytes, 11 bits
 				buf[y++] = (byte) (0xc0 | (c >> 6));
 				buf[y++] = (byte) (0x80 | (c & 0x3f));
+				_numCP++;
 				continue;
 			}
 			if (!Character.isSurrogate(c)) {
@@ -108,6 +113,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 				buf[y++] = (byte) (0xe0 | ((c >> 12)));
 				buf[y++] = (byte) (0x80 | ((c >> 6) & 0x3f));
 				buf[y++] = (byte) (0x80 | (c & 0x3f));
+				_numCP++;
 				continue;
 			}
 			// 4 bytes, 21 bits
@@ -120,25 +126,28 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					buf[y++] = (byte) (0x80 | ((cp >> 12) & 0x3f));
 					buf[y++] = (byte) (0x80 | ((cp >> 6) & 0x3f));
 					buf[y++] = (byte) (0x80 | (cp & 0x3f));
+					_numCP++;
 					continue;
 				}
 				// malformed
 			}
 			// malformed
 			this.offset = _offset;
+			this.codePoints += _numCP;
 			int n = y - off;
 			if (n == 0) {
-				return ERROR;
+				return Encoding.ERROR;
 			}
-			this.statePending = ERROR;
+			this.statePending = Encoding.ERROR;
 			return n;
 		}
 		// slow loop for remainder
-		for (; _offset < _limit && y < m;) {
+		for (; _offset < _limit && y < m && _numCP < numCodePoints;) {
 			char c = src[_offset++];
 			if (c < '\u0080') {
 				// 1 byte, 7 bits
 				buf[y++] = (byte) c;
+				_numCP++;
 				continue;
 			}
 			if (c < '\u0800') {
@@ -151,6 +160,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					break;
 				}
 				buf[y++] = (byte) b1;
+				_numCP++;
 				continue;
 			}
 			if (!Character.isSurrogate(c)) {
@@ -170,6 +180,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					break;
 				}
 				buf[y++] = (byte) b2;
+				_numCP++;
 				continue;
 			}
 			// 4 bytes, 21 bits
@@ -178,7 +189,8 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					this.highSurrogate = c;
 					if (y == off) {
 						this.offset = _offset;
-						return UNDERFLOW;
+						this.codePoints += _numCP;
+						return Encoding.UNDERFLOW;
 					}
 					break;
 				}
@@ -208,6 +220,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 						break;
 					}
 					buf[y++] = (byte) b3;
+					_numCP++;
 					continue;
 				}
 				// malformed
@@ -215,17 +228,20 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			// malformed
 			if (y == off) {
 				this.offset = _offset;
-				return ERROR;
+				this.codePoints += _numCP;
+				return Encoding.ERROR;
 			}
-			this.statePending = ERROR;
+			this.statePending = Encoding.ERROR;
 			break;
 		}
 		this.offset = _offset;
+		this.codePoints += _numCP;
 		return y - off;
 	}
 
 	@Override
-	int _encode(CharSequence src, byte[] buf, int off, int len) {
+	int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
+		int _numCP = 0;
 		int _offset = this.offset;
 		int _limit = this.limit;
 		int y = off;
@@ -235,7 +251,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			// have a high surrogate waiting. 
 			// cannot have pending output (code point unresolved)
 			if (_offset >= _limit) {
-				return UNDERFLOW;
+				return Encoding.UNDERFLOW;
 			}
 			// have at least one input char available
 			// have at least one output byte available
@@ -243,7 +259,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			char c = src.charAt(_offset);
 			if (!Character.isLowSurrogate(c)) {
 				// cannot resolve current code point
-				return ERROR;	// have not produced any output yet
+				return Encoding.ERROR;	// have not produced any output yet
 			}
 			// can resolve code point
 			_offset++;	// only consume next char on successful resolution
@@ -271,12 +287,13 @@ final class EncoderUTF_8 extends AbstractEncoder {
 				return 3;
 			}
 			buf[y++] = (byte) b3;
+			_numCP++;
 		} else {
 			// may have output pending
 			int np = this.numBytesPending;
 			if (np == 0) {
 				if (_offset == _limit) {
-					return UNDERFLOW;
+					return Encoding.UNDERFLOW;
 				}
 			} else {
 				// have at least 1 ouputbut byte available
@@ -293,21 +310,24 @@ final class EncoderUTF_8 extends AbstractEncoder {
 				} while (np != 0);
 				this.numBytesPending = 0;
 				this.bytesPending = 0;
+				_numCP++;
 			}
 		}
 		// have neither a high surrogate waiting, nor any pending output
 		// optimized loop without internal bounds checks or handling of pending output
-		for (int maxIn = _limit - 1, maxOut = m - 3; _offset < maxIn && y < maxOut;) {
+		for (int maxIn = _limit - 1, maxOut = m - 3; _offset < maxIn && y < maxOut && _numCP < numCodePoints;) {
 			char c = src.charAt(_offset++);
 			if (c < '\u0080') {
 				// 1 byte, 7 bits
 				buf[y++] = (byte) c;
+				_numCP++;
 				continue;
 			}
 			if (c < '\u0800') {
 				// 2 bytes, 11 bits
 				buf[y++] = (byte) (0xc0 | (c >> 6));
 				buf[y++] = (byte) (0x80 | (c & 0x3f));
+				_numCP++;
 				continue;
 			}
 			if (!Character.isSurrogate(c)) {
@@ -315,6 +335,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 				buf[y++] = (byte) (0xe0 | ((c >> 12)));
 				buf[y++] = (byte) (0x80 | ((c >> 6) & 0x3f));
 				buf[y++] = (byte) (0x80 | (c & 0x3f));
+				_numCP++;
 				continue;
 			}
 			// 4 bytes, 21 bits
@@ -327,25 +348,28 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					buf[y++] = (byte) (0x80 | ((cp >> 12) & 0x3f));
 					buf[y++] = (byte) (0x80 | ((cp >> 6) & 0x3f));
 					buf[y++] = (byte) (0x80 | (cp & 0x3f));
+					_numCP++;
 					continue;
 				}
 				// malformed
 			}
 			// malformed
 			this.offset = _offset;
+			this.codePoints += _numCP;
 			int n = y - off;
 			if (n == 0) {
-				return ERROR;
+				return Encoding.ERROR;
 			}
-			this.statePending = ERROR;
+			this.statePending = Encoding.ERROR;
 			return n;
 		}
 		// slow loop for remainder
-		for (; _offset < _limit && y < m;) {
+		for (; _offset < _limit && y < m && _numCP < numCodePoints;) {
 			char c = src.charAt(_offset++);
 			if (c < '\u0080') {
 				// 1 byte, 7 bits
 				buf[y++] = (byte) c;
+				_numCP++;
 				continue;
 			}
 			if (c < '\u0800') {
@@ -358,6 +382,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					break;
 				}
 				buf[y++] = (byte) b1;
+				_numCP++;
 				continue;
 			}
 			if (!Character.isSurrogate(c)) {
@@ -377,6 +402,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					break;
 				}
 				buf[y++] = (byte) b2;
+				_numCP++;
 				continue;
 			}
 			// 4 bytes, 21 bits
@@ -385,7 +411,8 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					this.highSurrogate = c;
 					if (y == off) {
 						this.offset = _offset;
-						return UNDERFLOW;
+						this.codePoints += _numCP;
+						return Encoding.UNDERFLOW;
 					}
 					break;
 				}
@@ -415,6 +442,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 						break;
 					}
 					buf[y++] = (byte) b3;
+					_numCP++;
 					continue;
 				}
 				// malformed
@@ -422,12 +450,14 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			// malformed
 			if (y == off) {
 				this.offset = _offset;
-				return ERROR;
+				this.codePoints += _numCP;
+				return Encoding.ERROR;
 			}
-			this.statePending = ERROR;
+			this.statePending = Encoding.ERROR;
 			break;
 		}
 		this.offset = _offset;
+		this.codePoints += _numCP;
 		return y - off;
 	}
 
@@ -447,5 +477,15 @@ final class EncoderUTF_8 extends AbstractEncoder {
 		this.numBytesPending = this.bytesPending = 0;
 		this.highSurrogate = NONE;
 		return this;
+	}
+
+	@Override
+	public int pendingInput() {
+		return this.highSurrogate != NONE ? 1 : 0;
+	}
+
+	@Override
+	public int needsInput() {
+		return this.highSurrogate != NONE ? 1 : 0;
 	}
 }

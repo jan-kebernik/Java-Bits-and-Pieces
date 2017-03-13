@@ -19,6 +19,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderASCII();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderASCII();
@@ -32,6 +33,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderUTF_8();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderUTF_8();
@@ -45,6 +47,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1250();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1250();
@@ -58,6 +61,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1251();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1251();
@@ -71,6 +75,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1252();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1252();
@@ -84,6 +89,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1253();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1253();
@@ -97,6 +103,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1254();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1254();
@@ -110,6 +117,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1255();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1255();
@@ -123,6 +131,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1256();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1256();
@@ -136,6 +145,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1257();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1257();
@@ -149,6 +159,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP1258();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP1258();
@@ -162,6 +173,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP874();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP874();
@@ -175,6 +187,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP932();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP932();
@@ -188,6 +201,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP936();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP936();
@@ -201,6 +215,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP949();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP949();
@@ -214,6 +229,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP950();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP950();
@@ -227,6 +243,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP860();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP860();
@@ -240,6 +257,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderCP865();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderCP865();
@@ -253,6 +271,7 @@ public enum Encoding {
 		public Decoder newDecoder() {
 			return new DecoderISO_8859_1();
 		}
+
 		@Override
 		public Encoder newEncoder() {
 			return new EncoderISO_8859_1();
@@ -260,6 +279,20 @@ public enum Encoding {
 	};
 
 	public abstract Decoder newDecoder();
-	
+
 	public abstract Encoder newEncoder();
+
+	/**
+	 * The value returned by a Decoder's decode() method or by an Encoder's
+	 * encode() method indicating that more input is required to fully resolve
+	 * the current step of encoding/decoding.
+	 */
+	public static final int UNDERFLOW = -1;
+
+	/**
+	 * The value returned by a Decoder's decode() method or by an Encoder's
+	 * encode() method indicating that the last resolved input was malformed or
+	 * unmappable.
+	 */
+	public static final int ERROR = -2;
 }
