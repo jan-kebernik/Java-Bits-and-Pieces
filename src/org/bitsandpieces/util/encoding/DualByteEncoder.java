@@ -22,7 +22,8 @@ abstract class DualByteEncoder extends AbstractEncoder {
 	@Override
 	int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
 		int _numCP = 0;
-		int _offset = this.offset;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
@@ -34,6 +35,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 			if (Character.isLowSurrogate(src[_offset])) {
 				// two-char error
 				this.offset = ++_offset;
+				this.chars++;
 			}
 			return Encoding.ERROR;
 		}
@@ -54,6 +56,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 					if (_offset == _limit) {
 						this.surr = c;
 						this.offset = _offset;
+						this.chars += (_offset - _offsetOld);
 						if (y == off) {
 							return Encoding.UNDERFLOW;
 						}
@@ -65,6 +68,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 					}
 				}
 				this.offset = _offset;	// update internal state
+				this.chars += (_offset - _offsetOld);
 				if (y == off) {
 					// no bytes produced yet
 					return Encoding.ERROR;
@@ -84,12 +88,14 @@ abstract class DualByteEncoder extends AbstractEncoder {
 			buf[y++] = (byte) lead;
 			if (y == m) {
 				this.offset = _offset;	// update internal state
+				this.chars += (_offset - _offsetOld);
 				this.bytePending = 0x80000000 | trail;
 				return y - off;
 			}
 			buf[y++] = (byte) trail;
 			_numCP++;
 		}
+		this.chars += (_offset - _offsetOld);
 		this.offset = _offset;	// update internal state
 		if (_offset == _limit && y == off) {
 			return Encoding.UNDERFLOW;
@@ -100,7 +106,8 @@ abstract class DualByteEncoder extends AbstractEncoder {
 	@Override
 	int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
 		int _numCP = 0;
-		int _offset = this.offset;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
@@ -112,6 +119,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 			if (Character.isLowSurrogate(src.charAt(_offset))) {
 				// two-char error
 				this.offset = ++_offset;
+				this.chars++;
 			}
 			return Encoding.ERROR;
 		}
@@ -132,6 +140,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 					if (_offset == _limit) {
 						this.surr = c;
 						this.offset = _offset;
+						this.chars += (_offset - _offsetOld);
 						if (y == off) {
 							return Encoding.UNDERFLOW;
 						}
@@ -143,6 +152,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 					}
 				}
 				this.offset = _offset;	// update internal state
+				this.chars += (_offset - _offsetOld);
 				if (y == off) {
 					// no bytes produced yet
 					return Encoding.ERROR;
@@ -162,6 +172,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 			buf[y++] = (byte) lead;
 			if (y == m) {
 				this.offset = _offset;	// update internal state
+				this.chars += (_offset - _offsetOld);
 				this.bytePending = 0x80000000 | trail;
 				return y - off;
 			}
@@ -169,6 +180,7 @@ abstract class DualByteEncoder extends AbstractEncoder {
 			_numCP++;
 		}
 		this.offset = _offset;	// update internal state
+		this.chars += (_offset - _offsetOld);
 		if (_offset == _limit && y == off) {
 			return Encoding.UNDERFLOW;
 		}

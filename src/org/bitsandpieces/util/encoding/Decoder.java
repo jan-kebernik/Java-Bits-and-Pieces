@@ -269,10 +269,10 @@ public interface Decoder {
 	long codePoints();
 
 	/**
-	 * Returns the number of input bytes processed since the last
+	 * Returns the number of input {@code byte}s processed since the last
 	 * {@link #reset() reset}.
 	 *
-	 * @return the number of input bytes processed since the last
+	 * @return the number of input {@code byte}s processed since the last
 	 * {@link #reset() reset}.
 	 */
 	long bytes();

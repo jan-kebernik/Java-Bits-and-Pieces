@@ -27,7 +27,8 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 
 	@Override
 	final int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
-		int _offset = this.offset;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
@@ -39,6 +40,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 			if (Character.isLowSurrogate(src[_offset])) {
 				// two-char error
 				this.offset = ++_offset;
+				this.chars++;
 			}
 			return Encoding.ERROR;
 		}
@@ -57,6 +59,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 					if (_offset == _limit) {
 						this.surr = c;
 						this.offset = _offset;
+						this.chars += (_offset - _offsetOld);
 						if (y == off) {
 							return Encoding.UNDERFLOW;
 						}
@@ -70,6 +73,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 					}
 				}
 				this.offset = _offset;
+				this.chars += (_offset - _offsetOld);
 				if (y == off) {
 					return Encoding.ERROR;
 				}
@@ -81,6 +85,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 			buf[y++] = (byte) (r & 0xff);
 		}
 		this.offset = _offset;
+		this.chars += (_offset - _offsetOld);
 		if (_offset == _limit && y == off) {
 			return Encoding.UNDERFLOW;
 		}
@@ -91,7 +96,8 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 
 	@Override
 	final int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
-		int _offset = this.offset;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		int _limit = this.limit;
 		char hs = this.surr;
 		if (hs != NONE) {
@@ -103,6 +109,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 			if (Character.isLowSurrogate(src.charAt(_offset))) {
 				// two-char error
 				this.offset = ++_offset;
+				this.chars++;
 			}
 			return Encoding.ERROR;
 		}
@@ -121,6 +128,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 					if (_offset == _limit) {
 						this.surr = c;
 						this.offset = _offset;
+						this.chars += (_offset - _offsetOld);
 						if (y == off) {
 							return Encoding.UNDERFLOW;
 						}
@@ -134,6 +142,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 					}
 				}
 				this.offset = _offset;
+				this.chars += (_offset - _offsetOld);
 				if (y == off) {
 					return Encoding.ERROR;
 				}
@@ -145,6 +154,7 @@ abstract class SingleByteEncoder extends AbstractEncoder {
 			buf[y++] = (byte) (r & 0xff);
 		}
 		this.offset = _offset;
+		this.chars += (_offset - _offsetOld);
 		if (_offset == _limit && y == off) {
 			return Encoding.UNDERFLOW;
 		}

@@ -20,7 +20,8 @@ final class EncoderUTF_8 extends AbstractEncoder {
 	@Override
 	int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
 		int _numCP = 0;
-		int _offset = this.offset;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		int _limit = this.limit;
 		int y = off;
 		int m = off + len;
@@ -50,18 +51,21 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			if (y == m) {
 				this.numBytesPending = 3;
 				this.bytesPending = (b3 << 16) | (b2 << 8) | b1;
+				this.chars++;
 				return 1;
 			}
 			buf[y++] = (byte) b1;
 			if (y == m) {
 				this.numBytesPending = 2;
 				this.bytesPending = (b3 << 8) | b2;
+				this.chars++;
 				return 2;
 			}
 			buf[y++] = (byte) b2;
 			if (y == m) {
 				this.numBytesPending = 1;
 				this.bytesPending = b1;
+				this.chars++;
 				return 3;
 			}
 			buf[y++] = (byte) b3;
@@ -133,6 +137,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			}
 			// malformed
 			this.offset = _offset;
+			this.chars += (_offset - _offsetOld);
 			this.codePoints += _numCP;
 			int n = y - off;
 			if (n == 0) {
@@ -189,6 +194,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					this.highSurrogate = c;
 					if (y == off) {
 						this.offset = _offset;
+						this.chars += (_offset - _offsetOld);
 						this.codePoints += _numCP;
 						return Encoding.UNDERFLOW;
 					}
@@ -228,6 +234,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			// malformed
 			if (y == off) {
 				this.offset = _offset;
+				this.chars += (_offset - _offsetOld);
 				this.codePoints += _numCP;
 				return Encoding.ERROR;
 			}
@@ -235,6 +242,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			break;
 		}
 		this.offset = _offset;
+		this.chars += (_offset - _offsetOld);
 		this.codePoints += _numCP;
 		return y - off;
 	}
@@ -242,7 +250,8 @@ final class EncoderUTF_8 extends AbstractEncoder {
 	@Override
 	int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
 		int _numCP = 0;
-		int _offset = this.offset;
+		int _offsetOld = this.offset;
+		int _offset = _offsetOld;
 		int _limit = this.limit;
 		int y = off;
 		int m = off + len;
@@ -272,18 +281,21 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			if (y == m) {
 				this.numBytesPending = 3;
 				this.bytesPending = (b3 << 16) | (b2 << 8) | b1;
+				this.chars++;
 				return 1;
 			}
 			buf[y++] = (byte) b1;
 			if (y == m) {
 				this.numBytesPending = 2;
 				this.bytesPending = (b3 << 8) | b2;
+				this.chars++;
 				return 2;
 			}
 			buf[y++] = (byte) b2;
 			if (y == m) {
 				this.numBytesPending = 1;
 				this.bytesPending = b1;
+				this.chars++;
 				return 3;
 			}
 			buf[y++] = (byte) b3;
@@ -355,6 +367,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			}
 			// malformed
 			this.offset = _offset;
+			this.chars += (_offset - _offsetOld);
 			this.codePoints += _numCP;
 			int n = y - off;
 			if (n == 0) {
@@ -411,6 +424,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 					this.highSurrogate = c;
 					if (y == off) {
 						this.offset = _offset;
+						this.chars += (_offset - _offsetOld);
 						this.codePoints += _numCP;
 						return Encoding.UNDERFLOW;
 					}
@@ -450,6 +464,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			// malformed
 			if (y == off) {
 				this.offset = _offset;
+				this.chars += (_offset - _offsetOld);
 				this.codePoints += _numCP;
 				return Encoding.ERROR;
 			}
@@ -457,6 +472,7 @@ final class EncoderUTF_8 extends AbstractEncoder {
 			break;
 		}
 		this.offset = _offset;
+		this.chars += (_offset - _offsetOld);
 		this.codePoints += _numCP;
 		return y - off;
 	}

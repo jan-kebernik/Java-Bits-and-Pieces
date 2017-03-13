@@ -21,7 +21,7 @@ abstract class AbstractEncoder implements Encoder {
 	protected int offset, limit;
 
 	protected int statePending;	// 0 or ERROR
-	protected long codePoints;
+	protected long codePoints, chars;
 
 	abstract int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints);
 
@@ -130,6 +130,7 @@ abstract class AbstractEncoder implements Encoder {
 	public Encoder reset() {
 		dropInput();
 		this.statePending = 0;
+		this.codePoints = this.chars = 0L;
 		return this;
 	}
 
@@ -149,5 +150,10 @@ abstract class AbstractEncoder implements Encoder {
 	@Override
 	public final long codePoints() {
 		return this.codePoints;
+	}
+	
+	@Override
+	public final long chars() {
+		return this.chars;
 	}
 }

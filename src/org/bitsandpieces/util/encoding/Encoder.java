@@ -237,6 +237,15 @@ public interface Encoder {
 	long codePoints();
 
 	/**
+	 * Returns the number of input {@code char}s processed since the last
+	 * {@link #reset() reset}.
+	 *
+	 * @return the number of input {@code char}s processed since the last
+	 * {@link #reset() reset}.
+	 */
+	long chars();
+	
+	/**
 	 * Causes this {@code Encoder} to discard its current input. Pending input
 	 * is <em>unaffacted</em> by this operation.
 	 *
