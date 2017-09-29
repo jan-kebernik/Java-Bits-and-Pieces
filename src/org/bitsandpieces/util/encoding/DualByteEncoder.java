@@ -5,209 +5,242 @@
  */
 package org.bitsandpieces.util.encoding;
 
-/**
- *
- * @author pp
- */
+// each code point maps to exactly 1 or 2 output bytes
+// supplementary code points are unmappable
+// high or low surrogates must not be mappable by impls
 abstract class DualByteEncoder extends AbstractEncoder {
 
-	private static final char NONE = 0;
+	private static final char NO_DEF = DualByteDecoder.NO_DEF;	// UNDEFINED
+	private static final char NONE = 0;							// not a surrogate
 
 	private int bytePending;
+	private char highSurrogate = NONE;
+	private final char[] t;
 
-	private char surr = NONE;
-
-	abstract char get(int i);
-
+	DualByteEncoder(char[] t) {
+		this.t = t;
+	}
+	
 	@Override
-	int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
+	final int _encode(CharSequence src, byte[] dest, int off, int maxBytes, int maxCodePoints, int _offset, int _limit) {
 		int _numCP = 0;
-		int _offsetOld = this.offset;
-		int _offset = _offsetOld;
-		int _limit = this.limit;
-		char hs = this.surr;
-		if (hs != NONE) {
-			// have a high surrogate waiting
-			if (_offset == _limit) {
-				return Encoding.UNDERFLOW;
+		int _offsetOld = _offset;
+		try {
+			char high = this.highSurrogate;
+			if (high != NONE) {
+				if (_offset == _limit) {
+					return 0;
+				}
+				// consume pending high surrogate
+				this.highSurrogate = NONE;
+				char c = src.charAt(_offset);
+				if (Character.isLowSurrogate(c)) {
+					_offset++;	// consume low surrogate
+					_numCP++;	// code point resolved
+					return -2;
+				}
+				// malformed code point
+				return -1;
 			}
-			this.surr = NONE;
-			if (Character.isLowSurrogate(src[_offset])) {
-				// two-char error
-				this.offset = ++_offset;
-				this.chars++;
+			int y = off;
+			int p = this.bytePending;
+			if (p != 0) {
+				dest[y++] = (byte) (p & 0xff);
+				_numCP++;	// code point resolved
 			}
-			return Encoding.ERROR;
-		}
-		int y = off;
-		int m = off + len;
-		int p = this.bytePending;
-		if (p != 0) {
-			buf[y++] = (byte) (p & 0xff);
-			this.bytePending = 0;
-			_numCP++;
-		}
-		for (; _offset < _limit && y < m && _numCP < numCodePoints;) {
-			char c = src[_offset++];
-			char r = get(c);
-			if (r == DualByteDecoder.NO_DEF) {
-				// unmappable
-				if (Character.isHighSurrogate(c)) {
-					if (_offset == _limit) {
-						this.surr = c;
-						this.offset = _offset;
-						this.chars += (_offset - _offsetOld);
-						if (y == off) {
-							return Encoding.UNDERFLOW;
+			for (int m = off + maxBytes; _offset < _limit && y < m && _numCP < maxCodePoints;) {
+				char c = src.charAt(_offset++);
+				char r = this.t[c];
+				if (r == NO_DEF) {
+					// unmappable, may be surrogate
+					if (Character.isHighSurrogate(c)) {
+						if (_offset == _limit) {
+							// out of input
+							this.highSurrogate = c;
+							int n = y - off;
+							this.bytes += n;
+							return n;
 						}
-						return y - off;
+						char d = src.charAt(_offset);
+						if (Character.isLowSurrogate(d)) {
+							_offset++;	// consume low surrogate
+							_numCP++;	// code point resolved
+							if (y == off) {
+								return -2;
+							}
+							this.pendingError = -2;
+							int n = y - off;
+							this.bytes += n;
+							return n;
+						}
+					} else if (!Character.isLowSurrogate(c)) {
+						// not high or low surrogate, valid single char code point
+						_numCP++;
 					}
-					if (Character.isLowSurrogate(src[_offset])) {
-						// two-char error
-						_offset++;
+					if (y == off) {
+						return -1;
 					}
+					this.pendingError = -1;
+					int n = y - off;
+					this.bytes += n;
+					return n;
 				}
-				this.offset = _offset;	// update internal state
-				this.chars += (_offset - _offsetOld);
-				if (y == off) {
-					// no bytes produced yet
-					return Encoding.ERROR;
+				// mappable, cannot be high or low surrogate
+				int lead = r >>> 8;
+				if (lead == 0) {
+					// single byte
+					dest[y++] = (byte) r;
+					_numCP++;	// code point resolved
+					continue;
 				}
-				this.statePending = Encoding.ERROR;
-				return y - off;
+				// dual byte
+				int cont = r & 0xff;
+				dest[y++] = (byte) lead;
+				if (y == m) {
+					this.bytePending = 0x80000000 | cont;
+					this.bytes += maxBytes;
+					return maxBytes;
+				}
+				dest[y++] = (byte) cont;
+				_numCP++;	// code point resolved
 			}
-			int lead = r >>> 8;
-			if (lead == 0) {
-				// one byte
-				buf[y++] = (byte) r;
-				_numCP++;
-				continue;
-			}
-			// two bytes
-			int trail = r & 0xff;
-			buf[y++] = (byte) lead;
-			if (y == m) {
-				this.offset = _offset;	// update internal state
-				this.chars += (_offset - _offsetOld);
-				this.bytePending = 0x80000000 | trail;
-				return y - off;
-			}
-			buf[y++] = (byte) trail;
-			_numCP++;
+			int n = y - off;
+			this.bytes += n;
+			return n;
+		} finally {
+			this.offset = _offset;
+			this.chars += (_offset - _offsetOld);
+			this.codePoints += _numCP;
 		}
-		this.chars += (_offset - _offsetOld);
-		this.offset = _offset;	// update internal state
-		if (_offset == _limit && y == off) {
-			return Encoding.UNDERFLOW;
-		}
-		return y - off;
 	}
 
 	@Override
-	int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
+	final int _encode(char[] src, byte[] dest, int off, int maxBytes, int maxCodePoints, int _offset, int _limit) {
 		int _numCP = 0;
-		int _offsetOld = this.offset;
-		int _offset = _offsetOld;
-		int _limit = this.limit;
-		char hs = this.surr;
-		if (hs != NONE) {
-			// have a high surrogate waiting
-			if (_offset == _limit) {
-				return Encoding.UNDERFLOW;
+		int _offsetOld = _offset;
+		try {
+			char high = this.highSurrogate;
+			if (high != NONE) {
+				if (_offset == _limit) {
+					return 0;
+				}
+				// consume pending high surrogate
+				this.highSurrogate = NONE;
+				char c = src[_offset];
+				if (Character.isLowSurrogate(c)) {
+					_offset++;	// consume low surrogate
+					_numCP++;	// code point resolved
+					return -2;
+				}
+				// malformed code point
+				return -1;
 			}
-			this.surr = NONE;
-			if (Character.isLowSurrogate(src.charAt(_offset))) {
-				// two-char error
-				this.offset = ++_offset;
-				this.chars++;
+			int y = off;
+			int p = this.bytePending;
+			if (p != 0) {
+				dest[y++] = (byte) (p & 0xff);
+				_numCP++;	// code point resolved
 			}
-			return Encoding.ERROR;
-		}
-		int y = off;
-		int m = off + len;
-		int p = this.bytePending;
-		if (p != 0) {
-			buf[y++] = (byte) (p & 0xff);
-			this.bytePending = 0;
-			_numCP++;
-		}
-		for (; _offset < _limit && y < m && _numCP < numCodePoints;) {
-			char c = src.charAt(_offset++);
-			char r = get(c);
-			if (r == DualByteDecoder.NO_DEF) {
-				// unmappable
-				if (Character.isHighSurrogate(c)) {
-					if (_offset == _limit) {
-						this.surr = c;
-						this.offset = _offset;
-						this.chars += (_offset - _offsetOld);
-						if (y == off) {
-							return Encoding.UNDERFLOW;
+			for (int m = off + maxBytes; _offset < _limit && y < m && _numCP < maxCodePoints;) {
+				char c = src[_offset++];
+				char r = this.t[c];
+				if (r == NO_DEF) {
+					// unmappable, may be surrogate
+					if (Character.isHighSurrogate(c)) {
+						if (_offset == _limit) {
+							// out of input
+							this.highSurrogate = c;
+							int n = y - off;
+							this.bytes += n;
+							return n;
 						}
-						return y - off;
+						char d = src[_offset];
+						if (Character.isLowSurrogate(d)) {
+							_offset++;	// consume low surrogate
+							_numCP++;	// code point resolved
+							if (y == off) {
+								return -2;
+							}
+							this.pendingError = -2;
+							int n = y - off;
+							this.bytes += n;
+							return n;
+						}
+					} else if (!Character.isLowSurrogate(c)) {
+						// not high or low surrogate, valid single char code point
+						_numCP++;
 					}
-					if (Character.isLowSurrogate(src.charAt(_offset))) {
-						// two-char error
-						_offset++;
+					if (y == off) {
+						return -1;
 					}
+					this.pendingError = -1;
+					int n = y - off;
+					this.bytes += n;
+					return n;
 				}
-				this.offset = _offset;	// update internal state
-				this.chars += (_offset - _offsetOld);
-				if (y == off) {
-					// no bytes produced yet
-					return Encoding.ERROR;
+				// mappable, cannot be high or low surrogate
+				int lead = r >>> 8;
+				if (lead == 0) {
+					// single byte
+					dest[y++] = (byte) r;
+					_numCP++;	// code point resolved
+					continue;
 				}
-				this.statePending = Encoding.ERROR;
-				return y - off;
+				// dual byte
+				int cont = r & 0xff;
+				dest[y++] = (byte) lead;
+				if (y == m) {
+					this.bytePending = 0x80000000 | cont;
+					this.bytes += maxBytes;
+					return maxBytes;
+				}
+				dest[y++] = (byte) cont;
+				_numCP++;	// code point resolved
 			}
-			int lead = r >>> 8;
-			if (lead == 0) {
-				// one byte
-				buf[y++] = (byte) r;
-				_numCP++;
-				continue;
-			}
-			// two bytes
-			int trail = r & 0xff;
-			buf[y++] = (byte) lead;
-			if (y == m) {
-				this.offset = _offset;	// update internal state
-				this.chars += (_offset - _offsetOld);
-				this.bytePending = 0x80000000 | trail;
-				return y - off;
-			}
-			buf[y++] = (byte) trail;
-			_numCP++;
+			int n = y - off;
+			this.bytes += n;
+			return n;
+		} finally {
+			this.offset = _offset;
+			this.chars += (_offset - _offsetOld);
+			this.codePoints += _numCP;
 		}
-		this.offset = _offset;	// update internal state
-		this.chars += (_offset - _offsetOld);
-		if (_offset == _limit && y == off) {
-			return Encoding.UNDERFLOW;
-		}
-		return y - off;
 	}
 
 	@Override
-	public int pendingOutput() {
+	public final int needsInput() {
+		return this.highSurrogate != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int pendingInput() {
+		return this.highSurrogate != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int pendingOutput() {
 		// always 0 or 1 byte is pending
 		return this.bytePending >>> 31;
 	}
 
 	@Override
-	public Encoder reset() {
-		super.reset();
-		this.surr = NONE;
+	public boolean hasPending() {
+		return this.highSurrogate != NONE || this.bytePending != 0;
+	}
+	
+	@Override
+	public final Encoder dropPending() {
+		this.chars -= pendingInput();
 		this.bytePending = 0;
+		this.highSurrogate = NONE;
 		return this;
 	}
 
 	@Override
-	public final int pendingInput() {
-		return this.surr != NONE ? 1 : 0;
-	}
-
-	@Override
-	public final int needsInput() {
-		return this.surr != NONE ? 1 : 0;
+	public final Encoder reset() {
+		_reset();
+		this.bytePending = 0;
+		this.highSurrogate = NONE;
+		return dropInput();
 	}
 }

@@ -8,6 +8,8 @@ package org.bitsandpieces.util;
 import java.util.Arrays;
 import java.util.Objects;
 
+// note: this impl would probably be thousands of lines longer if default 
+// interface methods weren't a thing.
 /**
  * Standard {@code Format} implementation. Derive a new Format using
  * {@link #get(String)}.
@@ -25,9 +27,9 @@ import java.util.Objects;
  *
  * Each format is itself a builder for other formats with the same alphabet. If
  * a build instruction would result in an equal format, the same instance may be
- * returned. 
+ * (it usually is) returned. 
  */
-public final class Formats {
+final class Formats {
 
 	/**
 	 * Unsigned, truncated binary {@code Format} (letters '0', '1').
@@ -65,6 +67,7 @@ public final class Formats {
 	// injects the infix into the char array at interval "iv"
 	// there is pretty much no way around this kind of logic, short of 
 	// accounting for every single case for every radix.
+	// (or a major redesign of the entire code-base)
 	private static void spreadInfix(char[] a, int x, int y, char ix, int iv) {
 		while ((x -= iv) != (y -= iv)) {
 			System.arraycopy(a, x, a, y, iv);
@@ -85,8 +88,8 @@ public final class Formats {
 	public static final Format get(String alphabet) {
 		int radix = alphabet.length();	// implicit nullity check
 		if (radix < 2 || radix > 256) {
-			// less is weird?
-			// more isn't really printable, anyway.
+			// less is unary or undefined. not within the scope of this API.
+			// more isn't really printable, anyway (outsise ASCII range and tough to verify).
 			throw new IllegalArgumentException("alphabet.length() must be between 2 and 256: " + radix);
 		}
 		if ((radix & (radix - 1)) == 0) {
@@ -168,7 +171,8 @@ public final class Formats {
 		return x;
 	}
 
-	// parameters are always small enough for linear runtime to not matter
+	// parameters are always small enough for linear runtime to not matter, 
+	// rather not mess with floating point arithmetic at this scale right now.
 	private static int pow(int s, int d) {
 		int p = s;
 		for (int i = 1; i < d; i++) {
@@ -177,7 +181,8 @@ public final class Formats {
 		return p;
 	}
 
-	// values are calibrated such that the table size remains useful.
+	// values are calibrated such that the table size remains sensible (not 
+	// pointlessly small, not explosively huge).
 	private static int digitsForRadix(int radix) {
 		if (radix > 64) {
 			return 1;
@@ -206,7 +211,7 @@ public final class Formats {
 		final String alphabet;
 		final String prefix, suffix;	// preserves nullity of paramters
 
-		private int hash = 0;
+		private transient int hash = 0;	// lazy-loaded. thread-safe b/c effectively immutable
 
 		private AbstractFormat(char[][] tr, char[][] td, String px, String sx, String alphabet, String prefix, String suffix, int iv) {
 			this.tr = tr;
@@ -287,22 +292,23 @@ public final class Formats {
 		@Override
 		public final int hashCode() {
 			int h = this.hash;
-			if (h == 0) {
-				h = this.alphabet.hashCode();	// never null (also lazy)
-				h = h * 31 + Objects.hashCode(prefix());
-				h = h * 31 + Objects.hashCode(suffix());
-				h = h * 31 + Objects.hashCode(infix());
-				int s = isSigned() ? 1 : Integer.MIN_VALUE;
-				int t = isTruncated() ? 7 : 31;
-				if ((h = h ^ s + t * interval()) == 0) {
-					h = 1;	// seriously?
-				}
-				this.hash = h;
+			if (h != 0) {
+				return h;
 			}
-			return h;
+			h = this.alphabet.hashCode();	// never null (also lazy)
+			h = h * 31 + Objects.hashCode(prefix());
+			h = h * 31 + Objects.hashCode(suffix());
+			h = h * 31 + Objects.hashCode(infix());
+			int s = isSigned() ? 1 : Integer.MIN_VALUE;
+			int t = isTruncated() ? 7 : 31;
+			if ((h = h ^ s + t * interval()) == 0) {
+				h = 1;	// what are the chances? 1/32^2, i guess. just prevent re-calculation.
+			}
+			return this.hash = h;
 		}
 	}
 
+	// used by most formats, generally pretty good at everything
 	private static final class Arbitrary {
 
 		private static Format get(String alphabet) {
@@ -312,17 +318,17 @@ public final class Formats {
 
 		private static final class RadixData {
 
-			private static final double LOG2 = Math.log(2);
+			private static final double LOG2 = Math.log(2.0d);
 
 			private final int radix;
 
 			private final int digits, divisor;
 
-			private final int s8, s16, s32, s64;
-			private final int u8, u16, u32, u64;
+			private final int s08, s16, s32, s64;
+			private final int u08, u16, u32, u64;
 
-			private final int sdiv8, sdiv16, sdiv32, sdiv64;
-			private final int udiv8, udiv16, udiv32, udiv64;
+			private final int sdiv08, sdiv16, sdiv32, sdiv64;
+			private final int udiv08, udiv16, udiv32, udiv64;
 
 			private final char[] zeros;
 
@@ -340,34 +346,37 @@ public final class Formats {
 				this.radix = a.length();
 				// if the radix is even, the divisor will always be even as well.
 				// thus, unsigned division can be achieved by 
-				// first shifting right once, then dividing by half the divisor.
+				// first shifting right once, then dividing by half the divisor,
+				// without losing information.
 				// otherwise, we avoid slow BigInteger conversion by making use 
-				// of a manual long division implementation
-				this.divi = (radix & 1) != 0
+				// of a manual long division implementation.
+				// This may seem like overkill, but the BI solution just has way
+				// too much indirection/overhead for something this basic.
+				this.divi = (this.radix & 1) != 0
 						? RadixData::divideUnsigned
 						: (long n, long d) -> (n >>> 1) / (d >>> 1);
 
-				this.digits = digitsForRadix(radix);	// # digits per division/array access
-				double bitsPerDigit = Math.log(radix) / LOG2;	// base-2 log of radix
+				this.digits = digitsForRadix(this.radix);			// # digits per division/array access
+				double bitsPerDigit = Math.log(this.radix) / LOG2;	// base-2 log of radix
 
 				// unsigned max digits for each word-length
-				this.u8 = numDigits(8, bitsPerDigit);
+				this.u08 = numDigits(8, bitsPerDigit);
 				this.u16 = numDigits(16, bitsPerDigit);
 				this.u32 = numDigits(32, bitsPerDigit);
 				this.u64 = numDigits(64, bitsPerDigit);
 
 				// signed max digits for each word-length
-				if ((radix & (radix - 1)) == 0) {
+				if ((this.radix & (this.radix - 1)) == 0) {
 					// if the radix is a power of two, then
-					// the MIN_VALUE's may actually use 
+					// the MIN_VALUEs may actually use 
 					// the entire word lengths
 					// -1000000 == -128, etc...
-					this.s8 = u8;
+					this.s08 = u08;
 					this.s16 = u16;
 					this.s32 = u32;
 					this.s64 = u64;
 				} else {
-					this.s8 = numDigits(7, bitsPerDigit);
+					this.s08 = numDigits(7, bitsPerDigit);
 					this.s16 = numDigits(15, bitsPerDigit);
 					this.s32 = numDigits(31, bitsPerDigit);
 					this.s64 = numDigits(63, bitsPerDigit);
@@ -375,18 +384,18 @@ public final class Formats {
 
 				int d = digits - 1;
 				// # index of highest division required for signed word lengths
-				this.sdiv8 = ((s8 + d) / digits) - 2;
+				this.sdiv08 = ((s08 + d) / digits) - 2;
 				this.sdiv16 = ((s16 + d) / digits) - 2;
 				this.sdiv32 = ((s32 + d) / digits) - 2;
 				this.sdiv64 = ((s64 + d) / digits) - 2;
 
 				// # index of highest division required for unsigned word lengths
-				this.udiv8 = ((u8 + d) / digits) - 2;
+				this.udiv08 = ((u08 + d) / digits) - 2;
 				this.udiv16 = ((u16 + d) / digits) - 2;
 				this.udiv32 = ((u32 + d) / digits) - 2;
 				this.udiv64 = ((u64 + d) / digits) - 2;
 
-				this.divisor = divisor(radix, digits);
+				this.divisor = divisor(this.radix, digits);
 
 				Arrays.fill(this.zeros = new char[u64], a.charAt(0));
 
@@ -402,8 +411,8 @@ public final class Formats {
 
 			// slow, but correct long division for odd divisors. only applies to 
 			// long primitives and is only performed once for each operation 
-			// (subsequent division are always in the signed range)
-			// This is still much cheaper than using BigInteger conversion.
+			// (in order to the remaining calculation into the signed range)
+			// This is still preferable to using BigInteger conversion.
 			private static long divideUnsigned(long n, long d) {
 				long u = d + Long.MIN_VALUE;	// for unsigned comparison
 				long r = 0;
@@ -717,9 +726,9 @@ public final class Formats {
 				}
 				int n = b;
 				if (n < 0) {
-					return copy32(t, off, n, 1, r.sdiv8, r.s8);
+					return copy32(t, off, n, 1, r.sdiv08, r.s08);
 				}
-				return copy32(t, off, -n, 0, r.sdiv8, r.s8);
+				return copy32(t, off, -n, 0, r.sdiv08, r.s08);
 			}
 
 			@Override
@@ -777,9 +786,9 @@ public final class Formats {
 			public final char[] toCharArray(byte b) {
 				int n = b;
 				if (n < 0) {
-					return minus(copy32(n, 1, r.sdiv8, r.s8));
+					return minus(copy32(n, 1, r.sdiv08, r.s08));
 				}
-				return copy32(-n, 0, r.sdiv8, r.s8);
+				return copy32(-n, 0, r.sdiv08, r.s08);
 			}
 
 			@Override
@@ -1157,7 +1166,7 @@ public final class Formats {
 				if (t == null) {
 					throw new NullPointerException();
 				}
-				return copy32(t, off, b & 0xff, r.udiv8, r.u8);
+				return copy32(t, off, b & 0xff, r.udiv08, r.u08);
 			}
 
 			@Override
@@ -1231,7 +1240,7 @@ public final class Formats {
 
 			@Override
 			public final char[] toCharArray(byte b) {
-				return copy32(b & 0xff, r.udiv8, r.u8);
+				return copy32(b & 0xff, r.udiv08, r.u08);
 			}
 
 			@Override
@@ -1491,6 +1500,7 @@ public final class Formats {
 		}
 	}
 
+	// used by formats which are byte aligned (radix 2, 4, 16, 256)
 	private static final class PerByte {
 
 		private static Format get(String alphabet) {

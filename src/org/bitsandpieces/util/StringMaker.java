@@ -7,6 +7,9 @@ package org.bitsandpieces.util;
 
 import java.util.Objects;
 
+/*
+ * TODO Needs some testing, for sure.
+ */
 /**
  * StringBuilder alternative that offers efficient support for {@link Format}s.
  *
@@ -55,7 +58,7 @@ public class StringMaker implements Appendable, CharSequence {
 		return (this.chars = b);
 	}
 
-	public void ensureCapacity(int minCapacity) {
+	public StringMaker ensureCapacity(int minCapacity) {
 		char[] a = this.chars;
 		int aLen = a.length;
 		if (minCapacity > aLen) {
@@ -64,6 +67,7 @@ public class StringMaker implements Appendable, CharSequence {
 			this.chars = b;
 		}
 		// no action if minCapacity <= 0
+		return this;
 	}
 
 	private static int newCap(int aLen, int minCap) {
@@ -502,19 +506,84 @@ public class StringMaker implements Appendable, CharSequence {
 		return w == null ? (this.work = new int[256]) : ArrayUtil.fill(w, 0);
 	}
 
+	public int indexOf(char c) {
+		return _indexOf(c, 0, this.size);
+	}
+
+	public int indexOf(char c, int fromIndex) {
+		int s = this.size;
+		if (fromIndex < 0 || fromIndex >= s) {
+			throw new StringIndexOutOfBoundsException(fromIndex);
+		}
+		return _indexOf(c, fromIndex, s);
+	}
+
+	public int indexOf(char c, int fromIndex, int toIndex) {
+		rangeCheck(this.size, fromIndex, toIndex);
+		return _indexOf(c, fromIndex, toIndex);
+	}
+
+	private int _indexOf(char c, int fromIndex, int s) {
+		char[] a = this.chars;
+		for (; fromIndex < s; fromIndex++) {
+			if (a[fromIndex] == c) {
+				return fromIndex;
+			}
+		}
+		return -1;
+	}
+
+	public int lastIndexOf(char c) {
+		return _lastIndexOf(c, 0, this.size);
+	}
+
+	public int lastIndexOf(char c, int fromIndex) {
+		int s = this.size;
+		if (fromIndex < 0 || fromIndex >= s) {
+			throw new StringIndexOutOfBoundsException(fromIndex);
+		}
+		return _lastIndexOf(c, fromIndex, s);
+	}
+
+	public int lastIndexOf(char c, int fromIndex, int toIndex) {
+		rangeCheck(this.size, fromIndex, toIndex);
+		return _lastIndexOf(c, fromIndex, toIndex);
+	}
+
+	private int _lastIndexOf(char c, int fromIndex, int s) {
+		char[] a = this.chars;
+		for (int i = s - 1; i >= fromIndex; i--) {
+			if (a[i] == c) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	public int indexOf(String str) {
 		return indexOf(str, 0);
 	}
 
 	public int indexOf(String str, int fromIndex) {
 		int s = this.size;
-		if (fromIndex < 0 || fromIndex >= s) {
+		if (fromIndex < 0) {
 			throw new StringIndexOutOfBoundsException(fromIndex);
+		}
+		if (fromIndex >= s) {
+			return str.length() == 0 ? s : -1;
 		}
 		if (str.length() == 0) {
 			return fromIndex;
 		}
 		return Horspool.indexOf(this.chars, fromIndex, s - fromIndex, str, 0, str.length(), work());
+	}
+
+	public int indexOf(String str, int fromIndex, int toIndex) {
+		rangeCheck(this.size, fromIndex, toIndex);
+		if (str.length() == 0) {
+			return fromIndex;
+		}
+		return Horspool.indexOf(this.chars, fromIndex, toIndex - fromIndex, str, 0, str.length(), work());
 	}
 
 	public int lastIndexOf(String str) {
@@ -527,9 +596,17 @@ public class StringMaker implements Appendable, CharSequence {
 			throw new StringIndexOutOfBoundsException(fromIndex);
 		}
 		if (str.length() == 0) {
-			return fromIndex;
+			return s;
 		}
 		return Horspool.lastIndexOf(this.chars, fromIndex, s - fromIndex, str, 0, str.length(), work());
+	}
+
+	public int lastIndexOf(String str, int fromIndex, int toIndex) {
+		rangeCheck(this.size, fromIndex, toIndex);
+		if (str.length() == 0) {
+			return toIndex;
+		}
+		return Horspool.lastIndexOf(this.chars, fromIndex, toIndex - fromIndex, str, 0, str.length(), work());
 	}
 
 	@Override
@@ -634,5 +711,35 @@ public class StringMaker implements Appendable, CharSequence {
 			System.arraycopy(a, off, a, off + len, s - off);
 			return a;
 		}
+	}
+	
+	public boolean regionMatches(int srcOff, CharSequence dest) {
+		if (srcOff < 0) {
+			throw new StringIndexOutOfBoundsException();
+		}
+		return _regionMatches(srcOff, dest, 0, dest.length());
+	}
+	
+	public boolean regionMatches(int srcOff, CharSequence dest, int destOff, int len) {
+		if (len < 0) {
+			throw new IllegalArgumentException("len < 0: " + len);
+		}
+		if (srcOff < 0 || destOff < 0 || destOff > dest.length() - len) {
+			throw new StringIndexOutOfBoundsException();
+		}
+		return _regionMatches(srcOff, dest, destOff, len);
+	}
+	
+	private boolean _regionMatches(int srcOff, CharSequence dest, int destOff, int len) {
+		if(srcOff > this.size - len) {
+			return false;
+		}
+		char[] a = this.chars;
+		for (int m = srcOff + len; srcOff < m; srcOff++, destOff++) {
+			if (a[srcOff] != dest.charAt(destOff)) {
+				return false;
+			}
+		}
+		return true;
 	}
 }

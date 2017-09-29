@@ -5,92 +5,233 @@
  */
 package org.bitsandpieces.util.encoding;
 
-import java.io.UncheckedIOException;
-import java.util.Objects;
-
 /**
  *
  * @author pp
  */
 abstract class AbstractDecoder implements Decoder {
 
-	private static final byte[] EMPTY = {};
+	long bytes, chars;
+	int offset, limit;
+	int pendingError;
 
-	private byte[] src = EMPTY;
+	byte[] src;
 
-	protected int offset, limit;
-	protected int statePending;
-	protected long codePoints, bytes;
+	abstract int _decode(byte[] src, Appendable dest, int maxChars, int maxCodePoints, int _offset, int _limit);
 
-	abstract int _decode(byte[] src, char[] dest, int off, int len, int numCodePoints);
-
-	abstract int _decode(byte[] src, Appendable dest, int len, int numCodePoints) throws UncheckedIOException;
-
-	private int _decode(char[] dest, int off, int len, int numCodePoints) {
-		int s = this.statePending;
-		if (s != 0) {
-			this.statePending = 0;
-			return s;
-		}
-		if (len == 0 || numCodePoints == 0) {
-			return len;
-		}
-		return _decode(this.src, dest, off, len, numCodePoints);
-	}
-
-	private int _decode(Appendable dest, int len, int numCodePoints) throws UncheckedIOException {
-		int s = this.statePending;
-		if (s != 0) {
-			this.statePending = 0;
-			return s;
-		}
-		if (len == 0 || numCodePoints == 0) {
-			return len;
-		}
-		return _decode(this.src, dest, len, numCodePoints);
-	}
+	abstract int _decode(byte[] src, char[] dest, int off, int maxChars, int maxCodePoints, int _offset, int _limit);
 
 	@Override
-	public final int decode(char[] dest) {
-		Objects.requireNonNull(dest);
-		return _decode(dest, 0, dest.length, Integer.MAX_VALUE);
-	}
-
-	@Override
-	public final int decode(Appendable dest) throws UncheckedIOException {
-		Objects.requireNonNull(dest);
-		return _decode(dest, Integer.MAX_VALUE, Integer.MAX_VALUE);
-	}
-
-	@Override
-	public final int decode(char[] dest, int off, int len, int numCodePoints) {
-		Objects.requireNonNull(dest);
-		if (off < 0 || len < 0 || off > dest.length - len) {
+	public final int decode(char[] dest, int off) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (off < 0 || off > dest.length) {
 			throw new IndexOutOfBoundsException();
 		}
-		if (numCodePoints < 0) {
-			throw new IllegalArgumentException("numCodePoints < 0:" + numCodePoints);
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
 		}
-		return _decode(dest, off, len, numCodePoints);
+		int n = dest.length - off;
+		if (n == 0) {
+			// produce no chars
+			return 0;
+		}
+		return _decode(this.src, dest, off, n, Integer.MAX_VALUE, this.offset, this.limit);
 	}
 
 	@Override
-	public final int decode(Appendable dest, int len, int numCodePoints) throws UncheckedIOException {
-		Objects.requireNonNull(dest);
-		if (len < 0) {
-			throw new IllegalArgumentException("len < 0:" + len);
+	public final int decode(int inputBytes, char[] dest, int off) {
+		if (dest == null) {
+			throw new NullPointerException();
 		}
-		if (numCodePoints < 0) {
-			throw new IllegalArgumentException("numCodePoints < 0:" + numCodePoints);
+		if (off < 0 || off > dest.length) {
+			throw new IndexOutOfBoundsException();
 		}
-		return _decode(dest, len, numCodePoints);
+		if (inputBytes < 0) {
+			throw new IllegalArgumentException();
+		}
+		int _offset = this.offset;
+		int _limit = this.limit;
+		if (inputBytes > _limit - _offset) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		int n = dest.length - off;
+		if (n == 0) {
+			// produce no chars
+			return 0;
+		}
+		return _decode(this.src, dest, off, n, Integer.MAX_VALUE, _offset, _offset + inputBytes);
 	}
 
 	@Override
-	public final Decoder feedInput(byte[] src) {
-		Objects.requireNonNull(src);
-		if (this.offset != this.limit) {
-			throw new IllegalStateException("Current input not fully processed.");
+	public final int decode(char[] dest, int off, int maxChars, int maxCodePoints) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (off < 0 || off > dest.length) {
+			throw new IndexOutOfBoundsException();
+		}
+		if (maxChars < 0) {
+			throw new IllegalArgumentException();
+		}
+		if (maxCodePoints < 0) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		int n = Math.min(dest.length - off, maxChars);
+		if (n == 0 || maxCodePoints == 0) {
+			// produce no chars, or resolve no code points
+			return 0;
+		}
+		return _decode(this.src, dest, off, n, maxCodePoints, this.offset, this.limit);
+	}
+	
+	@Override
+	public final int decode(int inputBytes, char[] dest, int off, int maxChars, int maxCodePoints) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (off < 0 || off > dest.length) {
+			throw new IndexOutOfBoundsException();
+		}
+		if (inputBytes < 0) {
+			throw new IllegalArgumentException();
+		}
+		int _offset = this.offset;
+		int _limit = this.limit;
+		if (inputBytes > _limit - _offset) {
+			throw new IllegalArgumentException();
+		}
+		if (maxChars < 0) {
+			throw new IllegalArgumentException();
+		}
+		if (maxCodePoints < 0) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		int n = Math.min(dest.length - off, maxChars);
+		if (n == 0 || maxCodePoints == 0) {
+			// produce no chars, or resolve no code points
+			return 0;
+		}
+		return _decode(this.src, dest, off, n, maxCodePoints, _offset, _offset + inputBytes);
+	}
+
+	@Override
+	public final int decode(Appendable dest) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			this.pendingError = 0;
+			return s;
+		}
+		return _decode(this.src, dest, Integer.MAX_VALUE, Integer.MAX_VALUE, this.offset, this.limit);
+	}
+
+	@Override
+	public final int decode(int inputBytes, Appendable dest) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (inputBytes < 0) {
+			throw new IllegalArgumentException();
+		}
+		int _offset = this.offset;
+		int _limit = this.limit;
+		if (inputBytes > _limit - _offset) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		return _decode(this.src, dest, Integer.MAX_VALUE, Integer.MAX_VALUE, _offset, _offset + inputBytes);
+	}
+
+	@Override
+	public final int decode(int inputBytes, Appendable dest, int maxChars, int maxCodePoints) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (inputBytes < 0) {
+			throw new IllegalArgumentException();
+		}
+		int _offset = this.offset;
+		int _limit = this.limit;
+		if (inputBytes > _limit - _offset) {
+			throw new IllegalArgumentException();
+		}
+		if (maxChars < 0) {
+			throw new IllegalArgumentException();
+		}
+		if (maxCodePoints < 0) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		if (maxChars == 0 || maxCodePoints == 0) {
+			// produce no chars, or resolve no code points
+			return 0;
+		}
+		return _decode(this.src, dest, maxChars, maxCodePoints, _offset, _offset + inputBytes);
+	}
+	
+	@Override
+	public final int decode(Appendable dest, int maxChars, int maxCodePoints) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (maxChars < 0) {
+			throw new IllegalArgumentException();
+		}
+		if (maxCodePoints < 0) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		if (maxChars == 0 || maxCodePoints == 0) {
+			// produce no chars, or resolve no code points
+			return 0;
+		}
+		return _decode(this.src, dest, maxChars, maxCodePoints, this.offset, this.limit);
+	}
+
+	@Override
+	public final Decoder setInput(byte[] src) {
+		if (src == null) {
+			throw new NullPointerException();
 		}
 		this.src = src;
 		this.offset = 0;
@@ -99,25 +240,16 @@ abstract class AbstractDecoder implements Decoder {
 	}
 
 	@Override
-	public final Decoder feedInput(byte[] src, int off, int len) {
-		Objects.requireNonNull(src);
+	public final Decoder setInput(byte[] src, int off, int len) {
+		if (src == null) {
+			throw new NullPointerException();
+		}
 		if (off < 0 || len < 0 || off > src.length - len) {
 			throw new IndexOutOfBoundsException();
-		}
-		if (this.offset != this.limit) {
-			throw new IllegalStateException("Current input not fully processed.");
 		}
 		this.src = src;
 		this.offset = off;
 		this.limit = off + len;
-		return this;
-	}
-
-	@Override
-	public Decoder reset() {
-		dropInput();
-		this.statePending = 0;
-		this.codePoints = 0L;
 		return this;
 	}
 
@@ -127,19 +259,39 @@ abstract class AbstractDecoder implements Decoder {
 	}
 
 	@Override
-	public final long codePoints() {
-		return this.codePoints;
+	public final long charsProduced() {
+		return this.chars;
 	}
 
 	@Override
-	public long bytes() {
+	public final long bytesConsumed() {
 		return this.bytes;
 	}
-	
+
+	//@Override
+	//public final long codePointsResolved() {
+	//	return this.codePoints;
+	//}
+
 	@Override
 	public final Decoder dropInput() {
-		this.src = EMPTY;
-		this.offset = this.limit = 0;
+		this.offset = 0;
+		this.limit = 0;
+		this.bytes = 0;
+		this.src = null;
 		return this;
+	}
+
+	protected final void _reset() {
+		this.bytes = 0L;
+		this.chars = 0L;
+		//this.codePoints = 0L;
+		this.pendingError = 0;
+	}
+
+	@Override
+	public Decoder reset() {
+		_reset();
+		return dropInput();
 	}
 }

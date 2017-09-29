@@ -12,7 +12,8 @@ import java.io.UncheckedIOException;
  * {@code char}s.
  * <p>
  * Both input and output are provided purely by the calling classes, making
- * {@code Decoder}s very light-weight.
+ * {@code Decoder}s very light-weight. Calling classes are free to react to
+ * indiviual errors as they are encountered.
  * </p>
  *
  * @author Jan Kebernik
@@ -20,174 +21,298 @@ import java.io.UncheckedIOException;
 public interface Decoder {
 
 	/**
-	 * Decodes the current input and stores the resulting {@code char}s in the
-	 * provided array. The value returned is either the number of {@code char}s
-	 * stored or a negative value indicating that more input is required to
-	 * fully resolve the current code point or that its input is malformed or
-	 * unmappable.
-	 * <p>
-	 * Calling this method is equivalent to calling
-	 * {@link #decode(char[], int, int, int) decode(dest, 0, dest.length, Integer.MAX_VALUE)}.
-	 * </p>
-	 * <p>
-	 * The method will terminate when all available input is processed, when no
-	 * more output can be produced or when an error occurs. At most
-	 * {@code numCodePoints} and at most {@code len} {@code char}s will be
-	 * stored. As a result, partial code points may be stored; the remainder
-	 * will be held by this {@code Decoder} until more output is made available
-	 * in a sub-sequent {@code decode()} call. In practice, this simply means
-	 * that if {@link #pendingOutput() pendingOutput()} returns {@code 1}, the
-	 * last produced {@code char} is the high-surrogate of a two-{@code char}
-	 * code point, and the next produced char will be the low surrogate.
-	 * </p>
+	 * Returns this {@code Decoder}'s {@link Encoding}.
 	 *
-	 * @param dest the array in which to store decoded {@code char}s.
-	 * @return <ul><li>&gt= 0: The number of {@code char}s stored.</li>
-	 * <li>{@link Encoding#UNDERFLOW}: Indicates that more input is required to
-	 * resolve the current code point.</li>
-	 * <li>{@link Encoding#ERROR}: Indicates that the last code point could not
-	 * be resolved due to malformed or unmappable input.</li></ul>
-	 * A negative result always implies that no {@code char}s were stored.
-	 * @throws NullPointerException if {@code dest} is {@code null}.
-	 * @throws IndexOutOfBoundsException if the specified array range is
-	 * illegal.
-	 * @throws IllegalArgumentException if {@code numCodePoints} is negative.
+	 * @return this {@code Decoder}'s {@code Encoding}.
 	 */
-	int decode(char[] dest);
+	Encoding encoding();
 
 	/**
-	 * Decodes the current input and stores the resulting {@code char}s in the
-	 * provided array. The value returned is either the number of {@code char}s
-	 * stored or a negative value indicating that more input is required to
-	 * fully resolve the current code point or that its input is malformed or
-	 * unmappable.
+	 * Decodes the current input into the specified array.
 	 * <p>
 	 * The method will terminate when all available input is processed, when no
-	 * more output can be produced or when an error occurs. At most
-	 * {@code numCodePoints} and at most {@code len} {@code char}s will be
-	 * stored. As a result, partial code points may be stored; the remainder
-	 * will be held by this {@code Decoder} until more output is made available
-	 * in a sub-sequent {@code decode()} call. In practice, this simply means
-	 * that if {@link #pendingOutput() pendingOutput()} returns {@code 1}, the
-	 * last produced {@code char} is the high-surrogate of a two-{@code char}
-	 * code point, and the next produced char will be the low surrogate.
-	 * </p>
+	 * more output can be produced or when an error occurs. Partial code points
+	 * may need to be stored by this {@code Decoder} until more input is made
+	 * available or more output can be stored.
 	 *
-	 * @param dest the array in which to store decoded {@code char}s.
-	 * @param off the index at which to start storing {@code char}s.
-	 * @param len the desired number of {@code char}s to decode.
-	 * @param numCodePoints the desired number of code points to produce.
-	 * @return <ul><li>&gt= 0: The number of {@code char}s stored.</li>
-	 * <li>{@link Encoding#UNDERFLOW}: Indicates that more input is required to
-	 * resolve the current code point.</li>
-	 * <li>{@link Encoding#ERROR}: Indicates that the last code point could not
-	 * be resolved due to malformed or unmappable input.</li></ul>
-	 * A negative result always implies that no {@code char}s were stored.
-	 * @throws NullPointerException if {@code dest} is {@code null}.
-	 * @throws IndexOutOfBoundsException if the specified array range is
-	 * illegal.
-	 * @throws IllegalArgumentException if {@code numCodePoints} is negative.
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param dest the array into which to decode.
+	 * @param off the offset into the array.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input or output is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point. If
+	 * {@link #pendingOutput() pendingOutput()} reports a non-zero value, then
+	 * the provided array range did not provide enough space to fully store all
+	 * output.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
+	 * @throws IndexOutOfBoundsException if {@code off < 0} or
+	 * {@code off > dest.length}.
 	 */
-	int decode(char[] dest, int off, int len, int numCodePoints);
+	int decode(char[] dest, int off);
 
 	/**
-	 * Decodes the current input and stores the resulting {@code char}s in the
-	 * provided {@code Appendable}. The value returned is either the number of
-	 * {@code char}s stored or a negative value indicating that more input is
-	 * required to fully resolve the current code point or that its input is
-	 * malformed or unmappable.
-	 * <p>
-	 * Calling this method is equivalent to calling
-	 * {@link #decode(Appendable, int, int) decode(dest, Integer.MAX_VALUE, Integer.MAX_VALUE)}.
-	 * </p>
+	 * Decodes the current input into the specified array.
 	 * <p>
 	 * The method will terminate when all available input is processed, when no
-	 * more output can be produced or when an error occurs. At most
-	 * {@code numCodePoints} and at most {@code len} {@code char}s will be
-	 * stored. As a result, partial code points may be stored; the remainder
-	 * will be held by this {@code Decoder} until more output is made available
-	 * in a sub-sequent {@code decode()} call. In practice, this simply means
-	 * that if {@link #pendingOutput() pendingOutput()} returns {@code 1}, the
-	 * last produced {@code char} is the high-surrogate of a two-{@code char}
-	 * code point, and the next produced char will be the low surrogate.
-	 * </p>
+	 * more output can be produced or when an error occurs. Partial code points
+	 * may need to be stored by this {@code Decoder} until more input is made
+	 * available or more output can be stored.
 	 *
-	 * @param dest the {@code Appendable} in which to store decoded
-	 * {@code char}s.
-	 * @return <ul><li>&gt= 0: The number of {@code char}s stored.</li>
-	 * <li>{@link Encoding#UNDERFLOW}: Indicates that more input is required to
-	 * resolve the current code point.</li>
-	 * <li>{@link Encoding#ERROR}: Indicates that the last code point could not
-	 * be resolved due to malformed or unmappable input. Malformed code points
-	 * are not included in {@link #codePoints() codePoints()}</li></ul>
-	 * A negative result always implies that no {@code char}s were stored.
-	 * @throws NullPointerException if {@code dest} is {@code null}.
-	 * @throws IllegalArgumentException if {@code numCodePoints} or {@code len}
-	 * is negative.
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param inputBytes the desired number of {@code byte}s to consume. Must be
+	 * less than or equal to {@link #inputRemaining() inputRemaining()}.
+	 * @param dest the array into which to decode.
+	 * @param off the offset into the array.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input or output is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point. If
+	 * {@link #pendingOutput() pendingOutput()} reports a non-zero value, then
+	 * the provided array range did not provide enough space to fully store all
+	 * output.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
+	 * @throws IllegalArgumentException if {@code inputBytes < 0} or
+	 * {@code inputBytes > inputRemaining()}.
+	 * @throws IndexOutOfBoundsException if {@code off < 0} or
+	 * {@code off > dest.length}.
+	 */
+	int decode(int inputBytes, char[] dest, int off);
+
+	/**
+	 * Decodes the current input into the specified array.
+	 * <p>
+	 * The method will terminate when all available input is processed, when no
+	 * more output can be produced or when an error occurs. Partial code points
+	 * may need to be stored by this {@code Decoder} until more input is made
+	 * available or more output can be stored.
+	 *
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param dest the array into which to decode.
+	 * @param off the offset into the array.
+	 * @param maxChars the maximum number of {@code char}s to store.
+	 * @param maxCodePoints the maximum number of code points to resolve.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input or output is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point. If
+	 * {@link #pendingOutput() pendingOutput()} reports a non-zero value, then
+	 * the provided array range did not provide enough space to fully store all
+	 * output.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
+	 * @throws IllegalArgumentException if {@code inputBytes < 0}, if
+	 * {@code inputBytes > inputRemaining()}, if {@code maxChars < 0} or if
+	 * {@code maxCodePoints < 0}.
+	 * @throws IndexOutOfBoundsException if {@code off < 0} or
+	 * {@code off > dest.length}.
+	 */
+	int decode(char[] dest, int off, int maxChars, int maxCodePoints);
+
+	/**
+	 * Decodes the current input into the specified array.
+	 * <p>
+	 * The method will terminate when all available input is processed, when no
+	 * more output can be produced or when an error occurs. Partial code points
+	 * may need to be stored by this {@code Decoder} until more input is made
+	 * available or more output can be stored.
+	 *
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param inputBytes the desired number of {@code byte}s to consume. Must be
+	 * less than or equal to {@link #inputRemaining() inputRemaining()}.
+	 * @param dest the array into which to decode.
+	 * @param off the offset into the array.
+	 * @param maxChars the maximum number of {@code char}s to store.
+	 * @param maxCodePoints the maximum number of code points to resolve.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input or output is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point. If
+	 * {@link #pendingOutput() pendingOutput()} reports a non-zero value, then
+	 * the provided array range did not provide enough space to fully store all
+	 * output.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
+	 * @throws IllegalArgumentException if {@code inputBytes < 0}, if
+	 * {@code inputBytes > inputRemaining()}, if {@code maxChars < 0} or if
+	 * {@code maxCodePoints < 0}.
+	 * @throws IndexOutOfBoundsException if {@code off < 0} or
+	 * {@code off > dest.length}.
+	 */
+	int decode(int inputBytes, char[] dest, int off, int maxChars, int maxCodePoints);
+
+	/**
+	 * Decodes the current input to the specified {@code Appendable}.
+	 * <p>
+	 * The method will terminate when all available input is processed or when
+	 * an error occurs. Partial code points may need to be stored by this
+	 * {@code Decoder} until more input is made available.
+	 *
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param dest the {@code Appendable} to which to decode.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
 	 */
 	int decode(Appendable dest) throws UncheckedIOException;
 
 	/**
-	 * Decodes the current input and stores the resulting {@code char}s in the
-	 * provided {@code Appendable}. The value returned is either the number of
-	 * {@code char}s stored or a negative value indicating that more input is
-	 * required to fully resolve the current code point or that its input is
-	 * malformed or unmappable.
+	 * Decodes the current input to the specified {@code Appendable}.
 	 * <p>
-	 * The method will terminate when all available input is processed, when no
-	 * more output can be produced or when an error occurs. At most
-	 * {@code numCodePoints} and at most {@code len} {@code char}s will be
-	 * stored. As a result, partial code points may be stored; the remainder
-	 * will be held by this {@code Decoder} until more output is made available
-	 * in a sub-sequent {@code decode()} call. In practice, this simply means
-	 * that if {@link #pendingOutput() pendingOutput()} returns {@code 1}, the
-	 * last produced {@code char} is the high-surrogate of a two-{@code char}
-	 * code point, and the next produced char will be the low surrogate.
-	 * </p>
+	 * The method will terminate when all available input is processed or when
+	 * an error occurs. Partial code points may need to be stored by this
+	 * {@code Decoder} until more input is made available.
 	 *
-	 * @param dest the {@code Appendable} in which to store decoded
-	 * {@code char}s.
-	 * @param len the desired number of {@code char}s to decode.
-	 * @param numCodePoints the desired number of code points to produce.
-	 * @return <ul><li>&gt= 0: The number of {@code char}s stored.</li>
-	 * <li>{@link Encoding#UNDERFLOW}: Indicates that more input is required to
-	 * resolve the current code point.</li>
-	 * <li>{@link Encoding#ERROR}: Indicates that the last code point could not
-	 * be resolved due to malformed or unmappable input. Malformed code points
-	 * are not included in {@link #codePoints() codePoints()}</li></ul>
-	 * A negative result always implies that no {@code char}s were stored.
-	 * @throws NullPointerException if {@code dest} is {@code null}.
-	 * @throws IllegalArgumentException if {@code numCodePoints} or {@code len}
-	 * is negative.
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param inputBytes the desired number of {@code byte}s to consume. Must be
+	 * less than or equal to {@link #inputRemaining() inputRemaining()}.
+	 * @param dest the {@code Appendable} to which to decode.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
+	 * @throws IllegalArgumentException if {@code inputBytes < 0} or
+	 * {@code inputBytes > inputRemaining()}.
 	 */
-	int decode(Appendable dest, int len, int numCodePoints) throws UncheckedIOException;
+	int decode(int inputBytes, Appendable dest) throws UncheckedIOException;
 
 	/**
-	 * Returns the number of output {@code char}s that are held by this
-	 * {@code Decoder} as part of the code point currently being decoded.
+	 * Decodes the current input to the specified {@code Appendable}.
+	 * <p>
+	 * The method will terminate when all available input is processed or when
+	 * an error occurs. Partial code points may need to be stored by this
+	 * {@code Decoder} until more input is made available.
 	 *
-	 * @return the number of output {@code char}s that are held by this
-	 * {@code Decoder} as part of the code point currently being decoded.
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param dest the {@code Appendable} to which to decode.
+	 * @param maxChars the maximum number of {@code char}s to append.
+	 * @param maxCodePoints the maximum number of code points to resolve.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
+	 * @throws IllegalArgumentException if {@code inputBytes < 0} or
+	 * {@code inputBytes > inputRemaining()}.
+	 * @throws IllegalArgumentException if {@code maxChars < 0} or
+	 * {@code maxCodePoints < 0}.
 	 */
-	int pendingOutput();
+	int decode(Appendable dest, int maxChars, int maxCodePoints) throws UncheckedIOException;
 
 	/**
-	 * Returns the number of input {@code byte}s held by this {@code Decoder} as
-	 * part of the code point currently being decoded.
+	 * Decodes the current input to the specified {@code Appendable}.
+	 * <p>
+	 * The method will terminate when all available input is processed or when
+	 * an error occurs. Partial code points may need to be stored by this
+	 * {@code Decoder} until more input is made available.
 	 *
-	 * @return the number of input {@code byte}s held by this {@code Decoder} as
-	 * part of the code point currently being decoded.
+	 * @apiNote All decoding and encoding methods are only truly complete once
+	 * they return a value of 0. This ensures that no pending errors are
+	 * swallowed.
+	 *
+	 * @param inputBytes the desired number of {@code byte}s to consume. Must be
+	 * less than or equal to {@link #inputRemaining() inputRemaining()}.
+	 * @param dest the {@code Appendable} to which to decode.
+	 * @param maxChars the maximum number of {@code char}s to append.
+	 * @param maxCodePoints the maximum number of code points to resolve.
+	 * @return <ul><li>&gt 0: The actual number of {@code char}s decoded.</li>
+	 * <li>== 0: Indicates that no further work can be done by this
+	 * {@code Decoder} until more input is provided. If
+	 * {@link #needsInput() needsInput()} reports a non-zero value, more input
+	 * is required to resolve the current code point.</li>
+	 * <li>&lt 0: Indicates that the last code point could not be resolved due
+	 * to malformed or unmappable input, and returns 0 minus the number of
+	 * {@code byte}s forming the unresolvable code point.</li></ul>
+	 * A negative result always implies that no {@code char}s were produced.
+	 * @throws NullPointerException if {@code dest == null}.
+	 * @throws IllegalArgumentException if {@code inputBytes < 0} or
+	 * {@code inputBytes > inputRemaining()}.
+	 * @throws IllegalArgumentException if {@code maxChars < 0} or
+	 * {@code maxCodePoints < 0}.
 	 */
-	int pendingInput();
+	int decode(int inputBytes, Appendable dest, int maxChars, int maxCodePoints) throws UncheckedIOException;
 
 	/**
-	 * Returns the number of additional input {@code byte}s required to fully
-	 * resolve the code point currently being decoded.
+	 * Instructs this {@code Decoder} to use the specified {@code byte}s as
+	 * input. The current input is discarded. Pending input is unaffected.
 	 *
-	 * @return the number of additional input {@code byte}s required to fully
-	 * resolve the code point currently being decoded.
+	 * @param src the array whose {@code byte}s to use as input
+	 * @return this {@code Decoder}.
+	 * @throws NullPointerException if {@code src} is {@code null}
 	 */
-	int needsInput();
+	default Decoder setInput(byte[] src) {
+		return setInput(src, 0, src.length);
+	}
+
+	/**
+	 * Instructs this {@code Decoder} to use the specified {@code byte}s as
+	 * input. The current input is discarded. Pending input is unaffected.
+	 *
+	 * @param src the array whose {@code byte}s to use as input.
+	 * @param off the offset into the byte-array.
+	 * @param len the number of {@code byte}s to use.
+	 * @return this {@code Decoder}.
+	 * @throws NullPointerException if {@code src} is {@code null}
+	 * @throws IndexOutOfBoundsException if the specified range is illegal
+	 */
+	Decoder setInput(byte[] src, int off, int len);
 
 	/**
 	 * Returns the number of input {@code byte}s this {@code Decoder} currently
@@ -200,88 +325,105 @@ public interface Decoder {
 	int inputRemaining();
 
 	/**
-	 * Instructs this {@code Decoder} to use the specified {@code byte}s as
-	 * input.
+	 * Returns the number of additional input {@code byte}s required to fully
+	 * resolve the code point currently being decoded.
+	 *
+	 * @return the number of additional input {@code byte}s required to fully
+	 * resolve the code point currently being decoded.
+	 */
+	int needsInput();
+
+	/**
+	 * Returns the number of input {@code byte}s held by this {@code Decoder} as
+	 * part of the code point currently being decoded. These {@code byte}s are
+	 * considered to be part of the value returned by
+	 * {@link #bytesConsumed() bytesConsumed()}, either until they are
+	 * {@link #dropPending() dropped} or until they are resolved in a subsequent
+	 * {@code decode()} call.
+	 *
+	 * @return the number of input {@code byte}s held by this {@code Decoder} as
+	 * part of the code point currently being decoded.
+	 */
+	int pendingInput();
+
+	/**
+	 * Returns the number of output {@code char}s held by this {@code Decoder}
+	 * as part of the code point currently being decoded.
 	 * <p>
-	 * Note that this {@code Decoder} must not have any input remaining at the
-	 * time of invoking this method, and will throw an
-	 * {@code IllegalStateException} unless
-	 * {@link #inputRemaining() inputRemaining()} reports a value of {@code 0}
-	 * or unless {@code decode()} returns {@link Encoding#UNDERFLOW UNDERFLOW}.
-	 * Either continue decoding or {@link #reset() reset()} this {@code Decoder}
-	 * to consume or discard any remaining input prior to calling this method.
-	 * </p>
+	 * Specifically, returns {@code 1} if the low surrogate of a <em>valid</em>
+	 * supplementary code point is currently being held by this {@code Decoder}
+	 * until more output can be produced in a subsequent {@code decode()} call,
+	 * returning {@code 0} in all other cases.
 	 *
-	 * @param src the array whose {@code byte}s to use as input
-	 * @return this {@code Decoder}
-	 * @throws IllegalStateException if this {@code Decoder} still has input
-	 * available.
-	 * @throws NullPointerException if {@code src} is {@code null}
+	 * @return the number of output {@code char}s held by this {@code Decoder}
+	 * as part of the code point currently being decoded.
 	 */
-	Decoder feedInput(byte[] src);
+	int pendingOutput();
 
 	/**
-	 * Instructs this {@code Decoder} to use the specified {@code byte}s as
-	 * input.
-	 * <p>
-	 * Note that this {@code Decoder} must not have any input remaining at the
-	 * time of invoking this method, and will throw an
-	 * {@code IllegalStateException} unless
-	 * {@link #inputRemaining() inputRemaining()} reports a value of {@code 0}
-	 * or unless {@code decode()} returns {@link Encoding#UNDERFLOW UNDERFLOW}.
-	 * Either continue decoding or {@link #reset() reset()} this {@code Decoder}
-	 * to consume or discard any remaining input prior to calling this method.
-	 * </p>
+	 * Returns the number of <em>valid</em> {@code char}s produced since the
+	 * last {@link #reset() reset}. {@code char}s that are part of malformed or
+	 * unmappable code points are not counted this way.
 	 *
-	 * @param src the array whose {@code byte}s to use as input
-	 * @param off the index of the first {@code byte}
-	 * @param len the number of {@code byte}s to use
-	 * @return this {@code Decoder}
-	 * @throws IllegalStateException if this {@code Decoder} still has input
-	 * available.
-	 * @throws NullPointerException if {@code src} is {@code null}
-	 * @throws IndexOutOfBoundsException if the specified array range is illegal
+	 * @return the number of <em>valid</em> {@code char}s produced since the
+	 * last {@code reset}.
 	 */
-	Decoder feedInput(byte[] src, int off, int len) throws IllegalStateException;
+	long charsProduced();
 
 	/**
-	 * Returns this {@code Decoder}'s {@link Encoding}.
+	 * Returns the number of input {@code byte}s consumed since the last
+	 * {@link #reset() reset}. Any pending input is part of this count,
+	 * {@link #dropPending() dropping} it will be reflected in the value
+	 * returned by this method.
 	 *
-	 * @return this {@code Decoder}'s {@code Encoding}.
+	 * @return the number of input {@code byte}s consumed since the last
+	 * {@link #reset() reset}.
 	 */
-	Encoding encoding();
+	long bytesConsumed();
 
 	/**
-	 * Resets this {@code Decoder} to its initial state.
-	 *
-	 * @return this {@code Decoder}
-	 */
-	Decoder reset();
-
-	/**
-	 * Returns the number of <em>valid</em> code points produced since the last
+	 * Returns the number of <em>valid</em> code points resolved since the last
 	 * {@link #reset() reset}. Malformed or unmappable code points are not
 	 * counted this way.
 	 *
-	 * @return the number of <em>valid</em> code points produced since the last
+	 * @return the number of <em>valid</em> code points resolved since the last
 	 * {@code reset}.
 	 */
-	long codePoints();
-
-	/**
-	 * Returns the number of input {@code byte}s processed since the last
-	 * {@link #reset() reset}.
-	 *
-	 * @return the number of input {@code byte}s processed since the last
-	 * {@link #reset() reset}.
-	 */
-	long bytes();
+	long codePointsResolved();
 
 	/**
 	 * Causes this {@code Decoder} to discard its current input. Pending input
 	 * is <em>unaffacted</em> by this operation.
 	 *
-	 * @return this {@code Decoder}
+	 * @return this {@code Decoder}.
 	 */
 	Decoder dropInput();
+
+	/**
+	 * Causes this {@code Decoder} to discard its pending input or output (only
+	 * one of which can be held at a time).
+	 * <p>
+	 * If any pending input is discarded, the value returned by
+	 * {@link #bytesConsumed() bytesConsumed()} will be decremented by the
+	 * number of currently pending input {@code byte}s.
+	 *
+	 * @return this {@code Decoder}.
+	 */
+	Decoder dropPending();
+
+	/**
+	 * Fully resets this {@code Decoder} to its initial state.
+	 *
+	 * @return this {@code Decoder}.
+	 */
+	Decoder reset();
+
+	/**
+	 * Returns {@code true} if this {@code Decoder} has any input or output
+	 * pending.
+	 *
+	 * @return {@code true} if this {@code Decoder} has any input or output
+	 * pending.
+	 */
+	boolean hasPending();
 }

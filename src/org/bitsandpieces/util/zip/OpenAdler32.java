@@ -24,7 +24,7 @@ import java.nio.ByteBuffer;
 public class OpenAdler32 implements OpenChecksum, Cloneable {
 
 	private static final int BASE = 65521;		// largest prime smaller than 65536
-	private static final long BASEL = BASE;		// largest prime smaller than 65536 (to avoid excessive casting costs)
+	private static final long BASEL = BASE;		// largest prime smaller than 65536 (to avoid casting costs)
 	/*
 	 * Largest n such that 255n(n+1)/2+(n+1)(BASE-1) <= 2^31-1, which is also
 	 * a multiple of 16. Using the default value of 5552 would result in
@@ -95,7 +95,7 @@ public class OpenAdler32 implements OpenChecksum, Cloneable {
 			sum1 %= BASEL;
 			sum0 %= BASEL;
 		}
-		// Remaning bytes.
+		// Remaining bytes.
 		for (int m = off + len; off < m; off += 8) {
 			sum1 += (sum0 += b[off + 0] & 0xffL);
 			sum1 += (sum0 += b[off + 1] & 0xffL);

@@ -17,12 +17,12 @@ public enum Encoding {
 	ASCII() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderASCII();
+			return new SingleByte.DecoderASCII();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderASCII();
+			return new SingleByte.EncoderASCII();
 		}
 	},
 	/**
@@ -45,12 +45,12 @@ public enum Encoding {
 	CP1250() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1250();
+			return new SingleByte.DecoderCP1250();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1250();
+			return new SingleByte.EncoderCP1250();
 		}
 	},
 	/**
@@ -59,12 +59,12 @@ public enum Encoding {
 	CP1251() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1251();
+			return new SingleByte.DecoderCP1251();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1251();
+			return new SingleByte.EncoderCP1251();
 		}
 	},
 	/**
@@ -73,12 +73,12 @@ public enum Encoding {
 	CP1252() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1252();
+			return new SingleByte.DecoderCP1252();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1252();
+			return new SingleByte.EncoderCP1252();
 		}
 	},
 	/**
@@ -87,12 +87,12 @@ public enum Encoding {
 	CP1253() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1253();
+			return new SingleByte.DecoderCP1253();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1253();
+			return new SingleByte.EncoderCP1253();
 		}
 	},
 	/**
@@ -101,12 +101,12 @@ public enum Encoding {
 	CP1254() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1254();
+			return new SingleByte.DecoderCP1254();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1254();
+			return new SingleByte.EncoderCP1254();
 		}
 	},
 	/**
@@ -115,12 +115,12 @@ public enum Encoding {
 	CP1255() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1255();
+			return new SingleByte.DecoderCP1255();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1255();
+			return new SingleByte.EncoderCP1255();
 		}
 	},
 	/**
@@ -129,12 +129,12 @@ public enum Encoding {
 	CP1256() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1256();
+			return new SingleByte.DecoderCP1256();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1256();
+			return new SingleByte.EncoderCP1256();
 		}
 	},
 	/**
@@ -143,12 +143,12 @@ public enum Encoding {
 	CP1257() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1257();
+			return new SingleByte.DecoderCP1257();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1257();
+			return new SingleByte.EncoderCP1257();
 		}
 	},
 	/**
@@ -157,12 +157,12 @@ public enum Encoding {
 	CP1258() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP1258();
+			return new SingleByte.DecoderCP1258();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP1258();
+			return new SingleByte.EncoderCP1258();
 		}
 	},
 	/**
@@ -171,12 +171,12 @@ public enum Encoding {
 	CP874() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP874();
+			return new SingleByte.DecoderCP874();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP874();
+			return new SingleByte.EncoderCP874();
 		}
 	},
 	/**
@@ -185,12 +185,12 @@ public enum Encoding {
 	CP932() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP932();
+			return new DualByte.DecoderCP932();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP932();
+			return new DualByte.EncoderCP932();
 		}
 	},
 	/**
@@ -199,12 +199,12 @@ public enum Encoding {
 	CP936() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP936();
+			return new DualByte.DecoderCP936();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP936();
+			return new DualByte.EncoderCP936();
 		}
 	},
 	/**
@@ -213,12 +213,12 @@ public enum Encoding {
 	CP949() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP949();
+			return new DualByte.DecoderCP949();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP949();
+			return new DualByte.EncoderCP949();
 		}
 	},
 	/**
@@ -227,12 +227,12 @@ public enum Encoding {
 	CP950() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP950();
+			return new DualByte.DecoderCP950();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP950();
+			return new DualByte.EncoderCP950();
 		}
 	},
 	/**
@@ -241,12 +241,12 @@ public enum Encoding {
 	CP860() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP860();
+			return new SingleByte.DecoderCP860();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP860();
+			return new SingleByte.EncoderCP860();
 		}
 	},
 	/**
@@ -255,12 +255,12 @@ public enum Encoding {
 	CP865() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderCP865();
+			return new SingleByte.DecoderCP865();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderCP865();
+			return new SingleByte.EncoderCP865();
 		}
 	},
 	/**
@@ -269,30 +269,26 @@ public enum Encoding {
 	ISO_8859_1() {
 		@Override
 		public Decoder newDecoder() {
-			return new DecoderISO_8859_1();
+			return new SingleByte.DecoderISO_8859_1();
 		}
 
 		@Override
 		public Encoder newEncoder() {
-			return new EncoderISO_8859_1();
+			return new SingleByte.EncoderISO_8859_1();
 		}
 	};
 
+	/**
+	 * Returns a new {@code Decoder} for this {@code Encoding}.
+	 *
+	 * @return a new {@code Decoder} for this {@code Encoding}.
+	 */
 	public abstract Decoder newDecoder();
 
+	/**
+	 * Returns a new {@code Encoder} for this {@code Encoding}.
+	 *
+	 * @return a new {@code Encoder} for this {@code Encoding}.
+	 */
 	public abstract Encoder newEncoder();
-
-	/**
-	 * The value returned by a Decoder's decode() method or by an Encoder's
-	 * encode() method indicating that more input is required to fully resolve
-	 * the current step of encoding/decoding.
-	 */
-	public static final int UNDERFLOW = -1;
-
-	/**
-	 * The value returned by a Decoder's decode() method or by an Encoder's
-	 * encode() method indicating that the last resolved input was malformed or
-	 * unmappable.
-	 */
-	public static final int ERROR = -2;
 }

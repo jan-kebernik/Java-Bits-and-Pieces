@@ -10,7 +10,6 @@ import java.util.NoSuchElementException;
 import java.util.Objects;
 import java.util.function.Consumer;
 import org.bitsandpieces.util.Format;
-import org.bitsandpieces.util.Formats;
 import org.bitsandpieces.util.function.IntObjBiFunction;
 
 /**
@@ -324,7 +323,7 @@ public class CompactArray64<V> implements Iterable<V> {
 		}
 	}
 	
-	private static final Format BIN = Formats.BIN.untruncated();
+	private static final Format BIN = Format.BIN.untruncated();
 	
 	@Override
 	public String toString() {

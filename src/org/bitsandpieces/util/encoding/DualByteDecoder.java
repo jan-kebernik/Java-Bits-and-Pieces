@@ -5,190 +5,169 @@
  */
 package org.bitsandpieces.util.encoding;
 
-import java.io.IOException;
 import java.io.UncheckedIOException;
-import org.bitsandpieces.util.ArrayUtil;
 
-/**
- *
- * @author pp
- */
+// exactly one or two bytes map to exactly one code point
+// decoded code points must be neither supplementary nor surrogates (single char only)
 abstract class DualByteDecoder extends AbstractDecoder {
 
-	private static final int NONE = 0;	// never a lead byte
-	static final char LEAD_B = 0xFFFE;	// DBCS LEAD BYTE
-	static final char NO_DEF = 0xFFFF;	// UNDEFINED
+	private static final int NONE = 0;			// never a lead byte
+	static final char LEAD_B = 0xFFFE;	// lead byte identifier
+	static final char NO_DEF = 0xFFFF;			// unmapped
 
-	private int leadPending = NONE;
+	private final char[] t0, t1;
+	private final int tableOffset;
 
-	// maps from char to 1 or 2 bytes (stored as a char)
-	// entries without a mapping == NO_DEF.
-	// in case the same char maps to different bytes, 
-	// only the first such mapping is used
-	static final char[] buildConversionTable(char[] t0, char[] t1, int off) {
-		char[] t = ArrayUtil.fill(new char[65536], NO_DEF);
-		for (int i = 0; i < 256; i++) {
-			char c = t0[i];
-			if (c != NO_DEF && c != LEAD_B) {
-				if (t[c] == NO_DEF) {
-					// not yet mapped
-					t[c] = (char) i;
-				}
-			}
-		}
-		for (int i = 0; i < t1.length; i++) {
-			char c = t1[i];	// cannot be lead byte
-			if (c != NO_DEF) {
-				if (t[c] == NO_DEF) {
-					// not yet mapped
-					t[c] = (char) (i + off);
-				}
-			}
-		}
-		return t;
-	}
+	private int lead = NONE;
 
-	static final int copyTable(char[] src, char[] dest, int off) {
-		System.arraycopy(src, 0, dest, off, src.length);
-		return src.length;
-	}
-
-	abstract int tableOffset();
-
-	abstract char getT0(int i);
-
-	abstract char getT1(int i);
-
-	@Override
-	final int _decode(byte[] src, char[] dest, int off, int len, int numCodePoints) {
-		int _offsetOld = this.offset;
-		int _offset = _offsetOld;
-		int _limit = this.limit;
-		if (_offset == _limit) {
-			return Encoding.UNDERFLOW;
-		}
-		int y = off;
-		int p = this.leadPending;
-		if (p != NONE) {
-			int i = ((p << 8) | (src[_offset] & 0xff)) - this.tableOffset();
-			this.leadPending = NONE;
-			if (i < 0) {
-				return Encoding.ERROR;
-			}
-			char c = this.getT1(i);
-			if (c == NO_DEF) {
-				return Encoding.ERROR;
-			}
-			_offset++;	// only consume on successful resolution
-			dest[y++] = c;
-		}
-		for (int m = off + Math.min(len, numCodePoints); _offset < _limit && y < m;) {
-			int b = src[_offset++] & 0xff;
-			char c0 = this.getT0(b);
-			if (c0 != NO_DEF) {
-				if (c0 != LEAD_B) {
-					dest[y++] = c0;
-					continue;
-				}
-				if (_offset == _limit) {
-					this.leadPending = b;
-					if (y == off) {
-						return Encoding.UNDERFLOW;
-					}
-					break;
-				}
-				int i = ((b << 8) | (src[_offset] & 0xff)) - this.tableOffset();
-				if (i >= 0) {
-					char c1 = this.getT1(i);
-					if (c1 != NO_DEF) {
-						_offset++;	// only consume on successful resolution
-						dest[y++] = c1;
-						continue;
-					}
-				}
-			}
-			if (y == off) {
-				this.bytes += (_offset - _offsetOld);
-				this.offset = _offset;
-				return Encoding.ERROR;
-			}
-			this.statePending = Encoding.ERROR;
-			break;
-		}
-		this.bytes += (_offset - _offsetOld);
-		this.offset = _offset;
-		int n = y - off;
-		this.codePoints += n;
-		return n;
+	DualByteDecoder(char[] t0, char[] t1, int tableOffset) {
+		this.t0 = t0;
+		this.t1 = t1;
+		this.tableOffset = tableOffset;
 	}
 
 	@Override
-	final int _decode(byte[] src, Appendable dest, int len, int numCodePoints) throws UncheckedIOException {
+	final int _decode(byte[] src, Appendable dest, int maxChars, int maxCodePoints, int _offset, int _limit) {
 		try {
-			int _offsetOld = this.offset;
-			int _offset = _offsetOld;
-			int _limit = this.limit;
-			if (_offset == _limit) {
-				return Encoding.UNDERFLOW;
-			}
+			int _offsetOld = _offset;
 			int y = 0;
-			int p = this.leadPending;
+			int p = this.lead;
 			if (p != NONE) {
-				int i = ((p << 8) | (src[_offset] & 0xff)) - this.tableOffset();
-				this.leadPending = NONE;
+				if (_offset == _limit) {
+					return 0;
+				}
+				int i = ((p << 8) | (src[_offset] & 0xff)) - this.tableOffset;
+				this.lead = NONE;
 				if (i < 0) {
-					return Encoding.ERROR;
+					return -1;	// unmappable, lead is at fault
 				}
-				char c = this.getT1(i);
+				char c = this.t1[i];
 				if (c == NO_DEF) {
-					return Encoding.ERROR;
+					return -1;	// unmappable, lead is at fault
 				}
-				_offset++;	// only consume on successful resolution
+				_offset++;	// consume continuation byte
 				dest.append(c);
 				y++;
 			}
-			for (int m = Math.min(len, numCodePoints); _offset < _limit && y < m;) {
+			for (int m = Math.min(maxChars, maxCodePoints); _offset < _limit && y < m;) {
 				int b = src[_offset++] & 0xff;
-				char c0 = this.getT0(b);
+				char c0 = this.t0[b];
 				if (c0 != NO_DEF) {
+					// provisionally mappable
 					if (c0 != LEAD_B) {
+						// single byte mapping
 						dest.append(c0);
 						y++;
 						continue;
 					}
+					// dual byte mapping
 					if (_offset == _limit) {
-						this.leadPending = b;
-						if (y == 0) {
-							return Encoding.UNDERFLOW;
-						}
+						// out of input
+						this.lead = b;
 						break;
 					}
-					int i = ((b << 8) | (src[_offset] & 0xff)) - this.tableOffset();
+					int i = ((b << 8) | (src[_offset] & 0xff)) - this.tableOffset;
 					if (i >= 0) {
-						char c1 = this.getT1(i);
+						char c1 = this.t1[i];
 						if (c1 != NO_DEF) {
-							_offset++;	// only consume on successful resolution
+							_offset++;
 							dest.append(c1);
 							y++;
 							continue;
 						}
 					}
+					// unmappable
 				}
+				// unmappable
 				if (y == 0) {
 					this.bytes += (_offset - _offsetOld);
 					this.offset = _offset;
-					return Encoding.ERROR;
+					return -1;
 				}
-				this.statePending = Encoding.ERROR;
+				this.pendingError = -1;
 				break;
 			}
 			this.bytes += (_offset - _offsetOld);
 			this.offset = _offset;
-			this.codePoints += y;
+			this.chars += y;
 			return y;
-		} catch (IOException ex) {
+		} catch (java.io.IOException ex) {
 			throw new UncheckedIOException(ex);
 		}
+	}
+
+	@Override
+	final int _decode(byte[] src, char[] dest, int off, int maxChars, int maxCodePoints, int _offset, int _limit) {
+		int _offsetOld = _offset;
+		int y = off;
+		int p = this.lead;
+		if (p != NONE) {
+			if (_offset == _limit) {
+				return 0;
+			}
+			int i = ((p << 8) | (src[_offset] & 0xff)) - this.tableOffset;
+			this.lead = NONE;
+			if (i < 0) {
+				return -1;	// unmappable, lead is at fault
+			}
+			char c = this.t1[i];
+			if (c == NO_DEF) {
+				return -1;	// unmappable, lead is at fault
+			}
+			_offset++;	// consume continuation byte
+			dest[y++] = c;
+		}
+		for (int m = off + Math.min(maxChars, maxCodePoints); _offset < _limit && y < m;) {
+			int b = src[_offset++] & 0xff;
+			char c0 = this.t0[b];
+			if (c0 != NO_DEF) {
+				// provisionally mappable
+				if (c0 != LEAD_B) {
+					// single byte mapping
+					dest[y++] = c0;
+					continue;
+				}
+				// dual byte mapping
+				if (_offset == _limit) {
+					// out of input
+					this.lead = b;
+					break;
+				}
+				int i = ((b << 8) | (src[_offset] & 0xff)) - this.tableOffset;
+				if (i >= 0) {
+					char c1 = this.t1[i];
+					if (c1 != NO_DEF) {
+						_offset++;
+						dest[y++] = c1;
+						continue;
+					}
+				}
+				// unmappable
+			}
+			// unmappable
+			if (y == off) {
+				this.bytes += (_offset - _offsetOld);
+				this.offset = _offset;
+				return -1;
+			}
+			this.pendingError = -1;
+			break;
+		}
+		this.bytes += (_offset - _offsetOld);
+		this.offset = _offset;
+		int n = y - off;
+		this.chars += n;
+		return n;
+	}
+
+	@Override
+	public final int needsInput() {
+		return this.lead != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int pendingInput() {
+		return this.lead != NONE ? 1 : 0;
 	}
 
 	@Override
@@ -197,19 +176,27 @@ abstract class DualByteDecoder extends AbstractDecoder {
 	}
 
 	@Override
-	public Decoder reset() {
-		super.reset();
-		this.leadPending = NONE;
+	public boolean hasPending() {
+		return this.lead != NONE;
+	}
+
+	@Override
+	public final long codePointsResolved() {
+		// each produced char is a valid code point
+		return this.chars;
+	}
+
+	@Override
+	public final Decoder dropPending() {
+		this.bytes -= pendingInput();
+		this.lead = NONE;
 		return this;
 	}
 
 	@Override
-	public final int needsInput() {
-		return this.leadPending != NONE ? 1 : 0;
-	}
-
-	@Override
-	public final int pendingInput() {
-		return this.leadPending != NONE ? 1 : 0;
+	public final Decoder reset() {
+		_reset();
+		this.lead = NONE;
+		return dropInput();
 	}
 }

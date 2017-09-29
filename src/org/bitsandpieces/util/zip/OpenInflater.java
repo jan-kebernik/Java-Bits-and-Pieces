@@ -32,6 +32,13 @@ package org.bitsandpieces.util.zip;
 
 import java.util.zip.DataFormatException;
 
+/*
+Something is broken here. Need to check this later. 
+Suspicion is that checksums are either caclulated incorrectly or they are applied
+inconsistently. Needs more detective work, I guess.
+Sorry.
+*/
+
 /**
  * Somewhat optimized pure-Java implementation of a
  * <a href="http://www.zlib.net/">ZLib</a> Inflater intended as a simple drop-in
@@ -1582,6 +1589,7 @@ public class OpenInflater {
 						}
 						//if (adler != reverse(_hold)) {
 						if ((int) adler.getValue() != Integer.reverseBytes(_hold)) {
+							// TODO something is wrong with the way the adler is updated.
 							throw new DataFormatException("incorrect data check");
 						}
 						_hold = _bits = 0;
@@ -1625,6 +1633,7 @@ public class OpenInflater {
 			}
 			return diff;
 		} catch (DataFormatException ex) {
+			// this is a bit brute-force, i guess...
 			_mode = BAD;
 			throw ex;
 		} finally {

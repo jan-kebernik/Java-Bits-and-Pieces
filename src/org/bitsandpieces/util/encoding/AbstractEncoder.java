@@ -5,155 +5,244 @@
  */
 package org.bitsandpieces.util.encoding;
 
-import java.util.Objects;
-
 /**
  *
  * @author pp
  */
 abstract class AbstractEncoder implements Encoder {
 
-	private static final char[] EMPTY = {};
+	long bytes, chars, codePoints;
+	int offset, limit;
+	int pendingError;
 
-	private char[] inArr = EMPTY;
-	private CharSequence inSeq;
+	char[] srcArr;
+	CharSequence srcSeq;
 
-	protected int offset, limit;
+	abstract int _encode(CharSequence src, byte[] dest, int off, int maxBytes, int maxCodePoints, int _offset, int _limit);
 
-	protected int statePending;	// 0 or ERROR
-	protected long codePoints, chars;
-
-	abstract int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints);
-
-	abstract int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints);
-	
-	private int _encode(byte[] buf, int off, int len, int numCodePoints) {
-		char[] in = this.inArr;
-		return in != null 
-				? _encode(in, buf, off, len, numCodePoints) 
-				: _encode(this.inSeq, buf, off, len, numCodePoints);
-	}
+	abstract int _encode(char[] src, byte[] dest, int off, int maxBytes, int maxCodePoints, int _offset, int _limit);
 
 	@Override
-	public final int encode(byte[] buf) {
-		Objects.requireNonNull(buf);
-		int s = this.statePending;
-		if (s != 0) {
-			this.statePending = 0;
-			return s;
+	public final int encode(byte[] dest, int off) {
+		if (dest == null) {
+			throw new NullPointerException();
 		}
-		if (buf.length == 0) {
-			return 0;
-		}
-		return _encode(buf, 0, buf.length, Integer.MAX_VALUE);
-	}
-
-	@Override
-	public final int encode(byte[] buf, int off, int len, int numCodePoints) {
-		Objects.requireNonNull(buf);
-		if (off < 0 || len < 0 || off > buf.length - len) {
+		if (off < 0 || off > dest.length) {
 			throw new IndexOutOfBoundsException();
 		}
-		if (numCodePoints < 0) {
-			throw new IllegalArgumentException("numCodePoints < 0:" + numCodePoints);
-		}
-		int s = this.statePending;
+		int s = this.pendingError;
 		if (s != 0) {
-			this.statePending = 0;
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
 			return s;
 		}
-		if (len == 0 || numCodePoints == 0) {
+		int n = dest.length - off;
+		if (n == 0) {
+			// produce no chars
 			return 0;
 		}
-		return _encode(buf, off, len, numCodePoints);
+		CharSequence src = this.srcSeq;
+		return src != null
+				? _encode(src, dest, off, n, Integer.MAX_VALUE, this.offset, this.limit)
+				: _encode(this.srcArr, dest, off, n, Integer.MAX_VALUE, this.offset, this.limit);
 	}
 
 	@Override
-	public final Encoder feedInput(CharSequence src) {
-		Objects.requireNonNull(src);
-		if (this.offset != this.limit) {
-			throw new IllegalStateException("Current input not fully processed.");
+	public final int encode(int inputChars, byte[] dest, int off) {
+		if (dest == null) {
+			throw new NullPointerException();
 		}
-		this.inArr = null;
-		this.inSeq = src;
+		if (off < 0 || off > dest.length) {
+			throw new IndexOutOfBoundsException();
+		}
+		if (inputChars < 0) {
+			throw new IllegalArgumentException();
+		}
+		int _offset = this.offset;
+		int _limit = this.limit;
+		if (inputChars > _limit - _offset) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		int n = dest.length - off;
+		if (n == 0) {
+			// produce no chars
+			return 0;
+		}
+		CharSequence src = this.srcSeq;
+		return src != null
+				? _encode(src, dest, off, n, Integer.MAX_VALUE, _offset, _offset + inputChars)
+				: _encode(this.srcArr, dest, off, n, Integer.MAX_VALUE, _offset, _offset + inputChars);
+	}
+
+	@Override
+	public final int encode(byte[] dest, int off, int maxBytes, int maxCodePoints) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (off < 0 || off > dest.length) {
+			throw new IndexOutOfBoundsException();
+		}
+		if (maxBytes < 0) {
+			throw new IllegalArgumentException();
+		}
+		if (maxCodePoints < 0) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		int n = Math.min(dest.length - off, maxBytes);
+		if (n == 0 || maxCodePoints == 0) {
+			// produce no chars or resolve no code points
+			return 0;
+		}
+		CharSequence src = this.srcSeq;
+		return src != null
+				? _encode(src, dest, off, n, maxCodePoints, this.offset, this.limit)
+				: _encode(this.srcArr, dest, off, n, maxCodePoints, this.offset, this.limit);
+	}
+
+	@Override
+	public final int encode(int inputChars, byte[] dest, int off, int maxBytes, int maxCodePoints) {
+		if (dest == null) {
+			throw new NullPointerException();
+		}
+		if (off < 0 || off > dest.length) {
+			throw new IndexOutOfBoundsException();
+		}
+		if (inputChars < 0) {
+			throw new IllegalArgumentException();
+		}
+		int _offset = this.offset;
+		int _limit = this.limit;
+		if (inputChars > _limit - _offset) {
+			throw new IllegalArgumentException();
+		}
+		if (maxBytes < 0) {
+			throw new IllegalArgumentException();
+		}
+		if (maxCodePoints < 0) {
+			throw new IllegalArgumentException();
+		}
+		int s = this.pendingError;
+		if (s != 0) {
+			// error must be returned even if no chars are to be produced
+			this.pendingError = 0;
+			return s;
+		}
+		int n = Math.min(dest.length - off, maxBytes);
+		if (n == 0 || maxCodePoints == 0) {
+			// produce no chars or resolve no code points
+			return 0;
+		}
+		CharSequence src = this.srcSeq;
+		return src != null
+				? _encode(src, dest, off, n, maxCodePoints, _offset, _offset + inputChars)
+				: _encode(this.srcArr, dest, off, n, maxCodePoints, _offset, _offset + inputChars);
+	}
+
+	@Override
+	public final Encoder setInput(CharSequence src) {
+		if (src == null) {
+			throw new NullPointerException();
+		}
+		this.srcArr = null;
+		this.srcSeq = src;
 		this.offset = 0;
 		this.limit = src.length();
 		return this;
 	}
 
 	@Override
-	public final Encoder feedInput(CharSequence src, int off, int len) {
-		Objects.requireNonNull(src);
+	public final Encoder setInput(CharSequence src, int off, int len) {
+		if (src == null) {
+			throw new NullPointerException();
+		}
 		if (off < 0 || len < 0 || off > src.length() - len) {
 			throw new IndexOutOfBoundsException();
 		}
-		if (this.offset != this.limit) {
-			throw new IllegalStateException("Current input not fully processed.");
-		}
-		this.inArr = null;
-		this.inSeq = src;
+		this.srcArr = null;
+		this.srcSeq = src;
 		this.offset = off;
 		this.limit = off + len;
 		return this;
 	}
 
 	@Override
-	public final Encoder feedInput(char[] src) {
-		Objects.requireNonNull(src);
-		if (this.offset != this.limit) {
-			throw new IllegalStateException("Current input not fully processed.");
+	public final Encoder setInput(char[] src) {
+		if (src == null) {
+			throw new NullPointerException();
 		}
-		this.inArr = src;
-		this.inSeq = null;
+		this.srcArr = src;
+		this.srcSeq = null;
 		this.offset = 0;
 		this.limit = src.length;
 		return this;
 	}
 
 	@Override
-	public final Encoder feedInput(char[] src, int off, int len) {
-		Objects.requireNonNull(src);
+	public final Encoder setInput(char[] src, int off, int len) {
+		if (src == null) {
+			throw new NullPointerException();
+		}
 		if (off < 0 || len < 0 || off > src.length - len) {
 			throw new IndexOutOfBoundsException();
 		}
-		if (this.offset != this.limit) {
-			throw new IllegalStateException("Current input not fully processed.");
-		}
-		this.inArr = src;
-		this.inSeq = null;
+		this.srcArr = src;
+		this.srcSeq = null;
 		this.offset = off;
 		this.limit = off + len;
 		return this;
 	}
-	
-	@Override
-	public Encoder reset() {
-		dropInput();
-		this.statePending = 0;
-		this.codePoints = this.chars = 0L;
-		return this;
-	}
 
 	@Override
-	public final Encoder dropInput() {
-		this.inArr = EMPTY;
-		this.inSeq = null;
-		this.offset = this.limit = 0;
-		return this;
-	}
-
-	@Override
-	public int inputRemaining() {
+	public final int inputRemaining() {
 		return this.limit - this.offset;
 	}
 
 	@Override
-	public final long codePoints() {
+	public final long bytesProduced() {
+		return this.bytes;
+	}
+
+	@Override
+	public final long charsConsumed() {
+		return this.chars;
+	}
+
+	@Override
+	public final long codePointsResolved() {
 		return this.codePoints;
 	}
-	
+
 	@Override
-	public final long chars() {
-		return this.chars;
+	public final Encoder dropInput() {
+		this.offset = 0;
+		this.limit = 0;
+		this.srcArr = null;
+		this.srcSeq = null;
+		return this;
+	}
+
+	protected final void _reset() {
+		this.bytes = 0L;
+		this.chars = 0L;
+		this.codePoints = 0L;
+		this.pendingError = 0;
+	}
+
+	@Override
+	public Encoder reset() {
+		_reset();
+		return dropInput();
 	}
 }

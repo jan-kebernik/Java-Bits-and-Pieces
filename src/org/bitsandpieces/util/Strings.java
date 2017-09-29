@@ -10,10 +10,8 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.function.BiFunction;
 import java.util.function.Function;
-import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -26,10 +24,7 @@ import java.util.logging.Logger;
  */
 public final class Strings {
 
-	// test
-	private static final String FAIL_MESSAGE = "Reflection failed. Falling back on general solution.";
-
-	public static final char NUL = 0;
+	private static final String FAIL_MESSAGE = "Reflection failed. Falling back on conventional solution.";
 
 	// Must be a BiFunction instead of a custom interface, because the 
 	// Lookup would not have access to classes outside the standard (bootstrap) scope.
@@ -71,11 +66,12 @@ public final class Strings {
 			throw err;
 		} catch (Throwable ex) {
 			// log recoverable exceptions.
-			Logger.getLogger(Formats.class.getName()).log(Level.WARNING, FAIL_MESSAGE, ex);
+			Logger.getLogger(Strings.class.getName()).log(Level.WARNING, FAIL_MESSAGE, ex);
 			return (char[] a, Boolean b) -> String.valueOf(a);
 		}
 	}
 
+	/*
 	public static Supplier getter(Object obj, Field f) throws Throwable {
 		MethodHandles.Lookup caller = MethodHandles.lookup();
 		MethodHandle handle = caller.findVirtual(Field.class, "get", MethodType.genericMethodType(1));
@@ -87,8 +83,8 @@ public final class Strings {
 				handle,
 				MethodType.genericMethodType(0)
 		).getTarget().invoke(f, Modifier.isStatic(f.getModifiers()) ? null : obj);
-	}
-
+	}*/
+	//
 	private static Function<String, char[]> getter() {
 		// Reflection API seems fastest here.
 		// Cannot use lambdas, because private fields cannot be accessed that 
@@ -100,12 +96,12 @@ public final class Strings {
 				try {
 					return (char[]) field.get(s);
 				} catch (IllegalArgumentException | IllegalAccessException ex) {
-					Logger.getLogger(Formats.class.getName()).log(Level.WARNING, FAIL_MESSAGE, ex);
+					Logger.getLogger(Strings.class.getName()).log(Level.WARNING, FAIL_MESSAGE, ex);
 					return s.toCharArray();
 				}
 			};
 		} catch (NoSuchFieldException | SecurityException ex) {
-			Logger.getLogger(Formats.class.getName()).log(Level.WARNING, FAIL_MESSAGE, ex);
+			Logger.getLogger(Strings.class.getName()).log(Level.WARNING, FAIL_MESSAGE, ex);
 			return String::toCharArray;
 		}
 	}

@@ -5,183 +5,214 @@
  */
 package org.bitsandpieces.util.encoding;
 
-/**
- *
- * @author pp
- */
+// each code point maps to exactly one output byte
+// supplementary code points are unmappable
+// high or low surrogates must not be mappable by impls
 abstract class SingleByteEncoder extends AbstractEncoder {
 
-	static final int INVALID_ID = 0;
+	static final int INVALID_ID = 0;	// not mapped
+	private static final char NONE = 0;			// not a high surrogate
+	private char highSurrogate = NONE;
 
 	int convert(int c) {
 		return INVALID_ID;
 	}
 
+	// if true, c must not be a surrogate
 	boolean isInDirectRange(char c) {
 		return c < '\u0080';
 	}
 
-	private static final char NONE = 0;
-
-	private char surr = NONE;
-
 	@Override
-	final int _encode(char[] src, byte[] buf, int off, int len, int numCodePoints) {
-		int _offsetOld = this.offset;
-		int _offset = _offsetOld;
-		int _limit = this.limit;
-		char hs = this.surr;
-		if (hs != NONE) {
-			// have a high surrogate waiting
-			if (_offset == _limit) {
-				return Encoding.UNDERFLOW;
+	final int _encode(CharSequence src, byte[] dest, int off, int maxBytes, int maxCodePoints, int _offset, int _limit) {
+		int _offsetOld = _offset;
+		int _numCP = 0;
+		try {
+			char high = this.highSurrogate;
+			if (high != NONE) {
+				if (_offset == _limit) {
+					return 0;
+				}
+				// consume pending high surrogate
+				this.highSurrogate = NONE;
+				char c = src.charAt(_offset);
+				if (Character.isLowSurrogate(c)) {
+					_offset++;	// consume low surrogate
+					_numCP++;	// code point resolved
+					return -2;
+				}
+				// malformed code point
+				return -1;
 			}
-			this.surr = NONE;
-			if (Character.isLowSurrogate(src[_offset])) {
-				// two-char error
-				this.offset = ++_offset;
-				this.chars++;
-			}
-			return Encoding.ERROR;
-		}
-		int y = off;
-		int m = off + Math.min(len, numCodePoints);
-		for (; _offset < _limit && y < m;) {
-			char c = src[_offset++];
-			if (isInDirectRange(c)) {
-				buf[y++] = (byte) c;
-				continue;
-			}
-			int r = convert(c);
-			if (r == INVALID_ID || (r >>> 16) != c) {
-				// unmappable
-				if (Character.isHighSurrogate(c)) {
-					if (_offset == _limit) {
-						this.surr = c;
-						this.offset = _offset;
-						this.chars += (_offset - _offsetOld);
-						if (y == off) {
-							return Encoding.UNDERFLOW;
+			int y = off;
+			for (int m = off + maxBytes;
+					_offset < _limit && y < m && _numCP < maxCodePoints;) {
+				char c = src.charAt(_offset++);
+				if (isInDirectRange(c)) {
+					// usually ASCII range, never surrogate range
+					dest[y++] = (byte) c;
+					continue;
+				}
+				int r = convert(c);
+				if (r == INVALID_ID || (r >>> 16) != c) {
+					// unmappable, may be surrogate
+					if (Character.isHighSurrogate(c)) {
+						if (_offset == _limit) {
+							// out of input
+							this.highSurrogate = c;
+							int n = y - off;
+							this.bytes += n;
+							return n;
 						}
-						int n = y - off;
-						this.codePoints += n;
-						return n;
-					}
-					if (Character.isLowSurrogate(src[_offset])) {
-						// two-char error
-						_offset++;
-					}
-				}
-				this.offset = _offset;
-				this.chars += (_offset - _offsetOld);
-				if (y == off) {
-					return Encoding.ERROR;
-				}
-				this.statePending = Encoding.ERROR;
-				int n = y - off;
-				this.codePoints += n;
-				return n;
-			}
-			buf[y++] = (byte) (r & 0xff);
-		}
-		this.offset = _offset;
-		this.chars += (_offset - _offsetOld);
-		if (_offset == _limit && y == off) {
-			return Encoding.UNDERFLOW;
-		}
-		int n = y - off;
-		this.codePoints += n;
-		return n;
-	}
-
-	@Override
-	final int _encode(CharSequence src, byte[] buf, int off, int len, int numCodePoints) {
-		int _offsetOld = this.offset;
-		int _offset = _offsetOld;
-		int _limit = this.limit;
-		char hs = this.surr;
-		if (hs != NONE) {
-			// have a high surrogate waiting
-			if (_offset == _limit) {
-				return Encoding.UNDERFLOW;
-			}
-			this.surr = NONE;
-			if (Character.isLowSurrogate(src.charAt(_offset))) {
-				// two-char error
-				this.offset = ++_offset;
-				this.chars++;
-			}
-			return Encoding.ERROR;
-		}
-		int y = off;
-		int m = off + Math.min(len, numCodePoints);
-		for (; _offset < _limit && y < m;) {
-			char c = src.charAt(_offset++);
-			if (isInDirectRange(c)) {
-				buf[y++] = (byte) c;
-				continue;
-			}
-			int r = convert(c);
-			if (r == INVALID_ID || (r >>> 16) != c) {
-				// unmappable
-				if (Character.isHighSurrogate(c)) {
-					if (_offset == _limit) {
-						this.surr = c;
-						this.offset = _offset;
-						this.chars += (_offset - _offsetOld);
-						if (y == off) {
-							return Encoding.UNDERFLOW;
+						char d = src.charAt(_offset);
+						if (Character.isLowSurrogate(d)) {
+							_offset++;	// consume low surrogate
+							_numCP++;	// code point resolved
+							if (y == off) {
+								return -2;
+							}
+							this.pendingError = -2;
+							int n = y - off;
+							this.bytes += n;
+							return n;
 						}
-						int n = y - off;
-						this.codePoints += n;
-						return n;
+					} else if (!Character.isLowSurrogate(c)) {
+						// not high or low surrogate, valid single char code point
+						_numCP++;
 					}
-					if (Character.isLowSurrogate(src.charAt(_offset))) {
-						// two-char error
-						_offset++;
+					if (y == off) {
+						return -1;
 					}
+					this.pendingError = -1;
+					int n = y - off;
+					this.bytes += n;
+					return n;
 				}
-				this.offset = _offset;
-				this.chars += (_offset - _offsetOld);
-				if (y == off) {
-					return Encoding.ERROR;
-				}
-				this.statePending = Encoding.ERROR;
-				int n = y - off;
-				this.codePoints += n;
-				return n;
+				// mappable, cannot be high or low surrogate
+				dest[y++] = (byte) (r & 0xff);
+				_numCP++;
 			}
-			buf[y++] = (byte) (r & 0xff);
+			int n = y - off;
+			this.bytes += n;
+			return n;
+		} finally {
+			this.offset = _offset;
+			this.chars += (_offset - _offsetOld);
+			this.codePoints += _numCP;
 		}
-		this.offset = _offset;
-		this.chars += (_offset - _offsetOld);
-		if (_offset == _limit && y == off) {
-			return Encoding.UNDERFLOW;
+	}
+
+	@Override
+	final int _encode(char[] src, byte[] dest, int off, int maxBytes, int maxCodePoints, int _offset, int _limit) {
+		int _offsetOld = _offset;
+		int _numCP = 0;
+		try {
+			char high = this.highSurrogate;
+			if (high != NONE) {
+				if (_offset == _limit) {
+					return 0;
+				}
+				// consume pending high surrogate
+				this.highSurrogate = NONE;
+				char c = src[_offset];
+				if (Character.isLowSurrogate(c)) {
+					_offset++;	// consume low surrogate
+					_numCP++;	// code point resolved
+					return -2;
+				}
+				// malformed code point
+				return -1;
+			}
+			int y = off;
+			for (int m = off + maxBytes;
+					_offset < _limit && y < m && _numCP < maxCodePoints;) {
+				char c = src[_offset++];
+				if (isInDirectRange(c)) {
+					// usually ASCII range, never surrogate range
+					dest[y++] = (byte) c;
+					continue;
+				}
+				int r = convert(c);
+				if (r == INVALID_ID || (r >>> 16) != c) {
+					// unmappable, may be surrogate
+					if (Character.isHighSurrogate(c)) {
+						if (_offset == _limit) {
+							// out of input
+							this.highSurrogate = c;
+							int n = y - off;
+							this.bytes += n;
+							return n;
+						}
+						char d = src[_offset];
+						if (Character.isLowSurrogate(d)) {
+							_offset++;	// consume low surrogate
+							_numCP++;	// code point resolved
+							if (y == off) {
+								return -2;
+							}
+							this.pendingError = -2;
+							int n = y - off;
+							this.bytes += n;
+							return n;
+						}
+					} else if (!Character.isLowSurrogate(c)) {
+						// not a surrogate, valid single char code point
+						_numCP++;
+					}
+					if (y == off) {
+						return -1;
+					}
+					this.pendingError = -1;
+					int n = y - off;
+					this.bytes += n;
+					return n;
+				}
+				// mappable
+				dest[y++] = (byte) (r & 0xff);
+				_numCP++;	// cannot be surrogate
+			}
+			int n = y - off;
+			this.bytes += n;
+			return n;
+		} finally {
+			this.offset = _offset;
+			this.chars += (_offset - _offsetOld);
+			this.codePoints += _numCP;
 		}
-		int n = y - off;
-		this.codePoints += n;
-		return n;
-	}
-
-	@Override
-	public final int pendingOutput() {
-		return 0;
-	}
-
-	@Override
-	public Encoder reset() {
-		super.reset();
-		this.surr = NONE;
-		return this;
-	}
-
-	@Override
-	public final int pendingInput() {
-		return this.surr != NONE ? 1 : 0;
 	}
 
 	@Override
 	public final int needsInput() {
-		return this.surr != NONE ? 1 : 0;
+		return this.highSurrogate != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int pendingInput() {
+		return this.highSurrogate != NONE ? 1 : 0;
+	}
+
+	@Override
+	public final int pendingOutput() {
+		// single bytes only
+		return 0;
+	}
+
+	@Override
+	public boolean hasPending() {
+		return this.highSurrogate != NONE;
+	}
+
+	@Override
+	public final Encoder dropPending() {
+		this.chars -= pendingInput();
+		this.highSurrogate = NONE;
+		return this;
+	}
+
+	@Override
+	public final Encoder reset() {
+		_reset();
+		this.highSurrogate = NONE;
+		return dropInput();
 	}
 }

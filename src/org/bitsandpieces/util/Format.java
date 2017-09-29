@@ -7,25 +7,72 @@ package org.bitsandpieces.util;
 
 /**
  * {@code Format}s allow for fast and flexible conversion of integer primitives
- * into {@code String}s or {@code char} arrays.
+ * into {@code String}s or {@code char}-arrays.
  * <p>
  * Each {@code Format} has an alphabet, is either signed or unsigned, truncated
  * or untruncated and has an optional prefix, infix and suffix. The standard
  * implementations use internal look-up tables in order to limit the amount of
  * divisions required to fully parse a value. Unless otherwise noted,
  * {@code Format}s should be considered immutable and thus safe for use by
- * multiple threads. Also, unless otherwise noted, {@code char} primitives are
- * handled as signed or unsigned depending on whether the {@code Format} is
+ * multiple concurrent threads. Unless otherwise noted, {@code char} primitives
+ * are handled as signed or unsigned depending on whether the {@code Format} is
  * signed.
  * </p><p>
- * The first character in the alphabet is the alphabet's ZERO. All leading
- * occurances of this character will be truncated by {@code Format}s whose
- * {@link #isTruncated() isTruncated()} method returns {@code true}.
+ * Each {@code Format} serves as a builder for other {@code Format}s with the
+ * same alphabet. The default implementations will alwas create instances that
+ * share their internal look-up tables, and are thus very cheap to vary.
+ * </p><p>
+ * The first character in the provided alphabet is considered the alphabet's
+ * "zero". All leading occurances of this character will be truncated by
+ * {@code Format}s whose {@link #isTruncated() isTruncated()} method returns
+ * {@code true}. Note that this does not apply to subsequent characters in the
+ * alphabet with the same value as the "zero".
+ * </p><p>
+ * There are presets for commonly-used alphabets available
+ * ({@link #BIN binary}, {@link #OCT octal}, {@link #DEC decimal} and
+ * {@link #HEX hexadecimal}). {@code Format}s with arbitrary alphabets can be
+ * created using {@link #get(String) get()}.
  * </p>
  *
  * @author Jan Kebernik
  */
 public interface Format {
+
+	/**
+	 * Unsigned, truncated binary {@code Format} (letters '0' and '1') with
+	 * prefix "0b".
+	 */
+	public static final Format BIN = Formats.get("01").unsigned().prefix("0b");
+
+	/**
+	 * Unsigned, truncated octal {@code Format} (letters '0' through '7').
+	 */
+	public static final Format OCT = Formats.get("01234567").unsigned();
+
+	/**
+	 * Signed, truncated decimal {@code Format} (letters '0' through '9').
+	 */
+	public static final Format DEC = Formats.get("0123456789");
+
+	/**
+	 * Unsigned, truncated, lower-case hexadecimal {@code Format} (letters '0'
+	 * through 'f') with prefix "0x".
+	 */
+	public static final Format HEX = Formats.get("0123456789abcdef").unsigned().prefix("0x");
+
+	/**
+	 * Returns a signed, truncated {@code Format} for the specified alphabet.
+	 *
+	 * @param alphabet contains the alphabet used by the new {@code Format}.
+	 * This {@code String} must have a length of at least 2 and at most 256.
+	 * Note that each char in the string counts as a single letter of the
+	 * alphabet, meaning that supplementary Unicode codepoints are not accounted
+	 * for.
+	 * @return a signed, truncated {@code Format} for the specified alphabet.
+	 */
+	public static Format get(String alphabet) {
+		return Formats.get(alphabet);
+	}
 
 	/**
 	 * Defines an array into which to copy. Responsible for performing its own

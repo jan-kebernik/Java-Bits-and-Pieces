@@ -867,4 +867,25 @@ public class ArrayUtil {
 		}
 		return sm.append(']').toString();
 	}
+
+	public static <T> String toString(T[] a) {
+		return _toString(a, 0, a.length);
+	}
+
+	public static <T> String toString(T[] a, int fromIndex, int toIndex) {
+		rangeCheck(a.length, fromIndex, toIndex);
+		return _toString(a, fromIndex, toIndex);
+	}
+
+	private static <T> String _toString(T[] a, int fromIndex, int toIndex) {
+		if (fromIndex == toIndex) {
+			return "[]";
+		}
+		StringMaker sm = new StringMaker((toIndex - fromIndex) * 3);
+		sm.append('[').append(a[fromIndex++]);
+		for (; fromIndex < toIndex; fromIndex++) {
+			sm.append(", ").append(a[fromIndex]);
+		}
+		return sm.append(']').toString();
+	}
 }
