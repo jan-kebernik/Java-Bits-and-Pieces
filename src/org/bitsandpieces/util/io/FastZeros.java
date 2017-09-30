@@ -10,17 +10,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * High-performance byte-based operations, offering significant speed-up
- * potential for performance-critical code.
- * <p>
- * <strong>Always include your own bounds-checks before calling any of these
- * methods!</strong> Otherwise there is a real risk to read / write
- * out-of-bounds memory.
- * <p>
- * Uses sun.misc.Unsafe under the hood, but will fall back on an alternate
- * implementation if access fails.
  *
- * @author Jan Kebernik
  */
 @SuppressWarnings("UseSpecificCatch")
 abstract class FastZeros {

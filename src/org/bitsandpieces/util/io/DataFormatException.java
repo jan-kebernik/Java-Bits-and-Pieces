@@ -6,7 +6,7 @@
 package org.bitsandpieces.util.io;
 
 /**
- * Signals that a data format error has occurred.
+ * Unchecked variant. Signals that a data format error has occurred.
  *
  * @author Jan Kebernik
  */

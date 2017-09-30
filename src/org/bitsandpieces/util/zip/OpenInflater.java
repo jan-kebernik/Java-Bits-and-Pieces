@@ -34,7 +34,7 @@ import java.util.zip.DataFormatException;
 
 /*
 Something is broken here. Need to check this later. 
-Suspicion is that checksums are either caclulated incorrectly or they are applied
+Suspicion is that checksums are either calculated incorrectly or they are applied
 inconsistently. Needs more detective work, I guess.
 Sorry.
 */

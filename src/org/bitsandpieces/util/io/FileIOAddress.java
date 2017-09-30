@@ -21,7 +21,6 @@ import java.util.Set;
  *
  * @author Jan Kebernik
  */
-// backed FileChannel
 public class FileIOAddress implements IOAddress {
 
 	private final Path file;
@@ -74,12 +73,6 @@ public class FileIOAddress implements IOAddress {
 
 		FileIOSource(IOAddress address, Path file) throws IOException {
 			try {
-				// neat, but not really necessary
-				// Path parent = file.getParent();
-				// if (parent == null) {
-				// 	throw new NullPointerException("Path has no root.");
-				// }
-				// Files.createDirectories(parent);
 				this.fc = FileChannel.open(file, OPTIONS, NO_ATTR);
 			} catch (java.io.IOException ex) {
 				throw new IOException(ex);
