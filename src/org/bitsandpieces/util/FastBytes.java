@@ -13,29 +13,32 @@ import java.util.logging.Logger;
  * High-performance byte-based operations, offering significant speed-up
  * potential for performance-critical code.
  * <p>
- * <strong>Always include your own Bounds-checks before calling any of these
- * methods!</strong>
+ * <strong>Always include your own bounds-checks before calling any of these
+ * methods!</strong> Otherwise there is a real risk to read / write
+ * out-of-bounds memory.
  * <p>
  * Uses sun.misc.Unsafe under the hood, but will fall back on an alternate
  * implementation if access fails.
+ * 
+ * @author Jan Kebernik
  */
 @SuppressWarnings("UseSpecificCatch")
-abstract class UnsafeBytes {
+abstract class FastBytes {
 
 	private static final sun.misc.Unsafe UNSAFE;
 	private static final long BYTE_ARRAY_BASE_OFFSET;
-	public static final UnsafeBytes INSTANCE;
+	static final FastBytes INSTANCE;
 	static {
-		UnsafeBytes bytes = null;
+		FastBytes bytes = null;
 		sun.misc.Unsafe u = null;
 		long byteOff = 0;
 		try {
-			// get new instance via constructor instead of relying on named field.
+			// get new instance via constructor instead of relying on named field (better compatibility with various runtimes).
 			Constructor<sun.misc.Unsafe> con = sun.misc.Unsafe.class.getDeclaredConstructor();
 			con.setAccessible(true);
 			u = con.newInstance();
 			byteOff = u.arrayBaseOffset(byte[].class);
-			// determine byte order used by unsafe, in case it even matters
+			// determine byte order used by Unsafe, in case it even matters (unsure)
 			byte[] testArray = {
 				(byte) 0x88, (byte) 0x77, (byte) 0x66, (byte) 0x55,
 				(byte) 0x44, (byte) 0x33, (byte) 0x22, (byte) 0x11};
@@ -53,14 +56,14 @@ abstract class UnsafeBytes {
 			throw err;
 		} catch (Throwable ex) {
 			// recoverable
-			Logger.getLogger(UnsafeBytes.class.getName()).log(Level.WARNING, "Could not access java.misc.Unsafe. Falling back on conventional solution.", ex);
+			Logger.getLogger(FastBytes.class.getName()).log(Level.WARNING, "Could not access java.misc.Unsafe. Falling back on conventional solution.", ex);
 		}
 		INSTANCE = bytes != null ? bytes : new BytesSafe();
 		UNSAFE = u;
 		BYTE_ARRAY_BASE_OFFSET = byteOff;
 	}
 
-	private UnsafeBytes() {
+	private FastBytes() {
 	}
 
 	abstract char getCharLE(byte[] b, int off);
@@ -89,37 +92,43 @@ abstract class UnsafeBytes {
 		return Double.longBitsToDouble(getLongBE(b, off));
 	}
 
-	abstract void putCharLE(byte[] b, int off, char n);
-	abstract void putCharBE(byte[] b, int off, char n);
+	abstract void putCharLE(char n, byte[] b, int off);
+	abstract void putCharBE(char n, byte[] b, int off);
 
-	abstract void putShortLE(byte[] b, int off, short n);
-	abstract void putShortBE(byte[] b, int off, short n);
+	abstract void putShortLE(short n, byte[] b, int off);
+	abstract void putShortBE(short n, byte[] b, int off);
 
-	abstract void putIntLE(byte[] b, int off, int n);
-	abstract void putIntBE(byte[] b, int off, int n);
+	abstract void putIntLE(int n, byte[] b, int off);
+	abstract void putIntBE(int n, byte[] b, int off);
 
-	void putFloatLE(byte[] b, int off, float n) {
-		putIntLE(b, off, Float.floatToRawIntBits(n));
+	void putFloatLE(float n, byte[] b, int off) {
+		putIntLE(Float.floatToRawIntBits(n), b, off);
 	}
-	void putFloatBE(byte[] b, int off, float n) {
-		putIntBE(b, off, Float.floatToRawIntBits(n));
+	void putFloatBE(float n, byte[] b, int off) {
+		putIntBE(Float.floatToRawIntBits(n), b, off);
 	}
 
-	abstract void putLongLE(byte[] b, int off, long n);
-	abstract void putLongBE(byte[] b, int off, long n);
+	abstract void putLongLE(long n, byte[] b, int off);
+	abstract void putLongBE(long n, byte[] b, int off);
 
-	void putDoubleLE(byte[] b, int off, double n) {
-		putLongLE(b, off, Double.doubleToRawLongBits(n));
+	void putDoubleLE(double n, byte[] b, int off) {
+		putLongLE(Double.doubleToRawLongBits(n), b, off);
 	}
-	void putDoubleBE(byte[] b, int off, double n) {
-		putLongBE(b, off, Double.doubleToRawLongBits(n));
+	void putDoubleBE(double n, byte[] b, int off) {
+		putLongBE(Double.doubleToRawLongBits(n), b, off);
 	}
 
 	// return number of leading matching bytes (0..len) in both arrays, starting
 	// at the respective offsets. does not perform any bounds-checks!
 	abstract int matchLeading(byte[] a, int offA, byte[] b, int offB, int len);
 
-	private static abstract class BytesUnsafe extends UnsafeBytes {
+	// fills the specified array range with 0s
+	abstract void fillWithZeros(byte[] a, int off, int len);
+
+	// fills the specified array range with the specified byte value
+	abstract void fill(byte[] a, int off, int len, byte n);
+
+	private static abstract class BytesUnsafe extends FastBytes {
 
 		// returns the number of matching leading bytes, where leading
 		// means bytes with a lower index in the array a long was read from.
@@ -129,54 +138,60 @@ abstract class UnsafeBytes {
 		abstract int numLeadingBytesMatch(long a, long b);
 
 		// This is about 3-6 times faster than the alternative, 
-		// approaching through-put of up to ~15 GB/s on regular hardware, 
+		// approaching through-put of up to ~15 GB/s on middling hardware, 
 		// at least when the the runs are small enough to fit into faster 
-		// CPU cache. Or something like that. Whatever, the speed is nuts!
+		// CPU cache (I guess!). 
 		// Making this a boolean equality check brings almost no gains.
-		// Which pretty much means that memory access is the only real bottleneck.
+		// Which means that memory speed is the most likely bottleneck.
+		// 
+		// matches the bytes from both arrays. returns number of matching bytes.
 		@Override
-		int matchLeading(byte[] a, int offA, byte[] b, int offB, int len) {
-			long _offA = BYTE_ARRAY_BASE_OFFSET + offA;
-			long _offB = BYTE_ARRAY_BASE_OFFSET + offB;
-			long _maxA = _offA + len;
-			// compare 64 (2x32) bytes in parallel (JIT generally does not unroll long-based loops)
-			for (long m = _maxA - 31L; _offA < m; _offA += 32L, _offB += 32L) {
+		final int matchLeading(byte[] a, int offA, byte[] b, int offB, int len) {
+			long _offA00 = BYTE_ARRAY_BASE_OFFSET + offA;
+			long _offB00 = BYTE_ARRAY_BASE_OFFSET + offB;
+			long _maxA = _offA00 + len;
+			// compare 64 (2*8*4) bytes in parallel (JIT generally does not unroll long-based loops)
+			for (long m = _maxA - 31L; _offA00 < m; _offA00 += 32L, _offB00 += 32L) {
+				// memoize offsets
+				long _offA08 = _offA00 + 8L;
+				long _offA16 = _offA00 + 16L;
+				long _offA24 = _offA00 + 24L;
 				// read 32 bytes from array a
-				long _a0 = UNSAFE.getLong(a, _offA);
-				long _a1 = UNSAFE.getLong(a, _offA + 8L);
-				long _a2 = UNSAFE.getLong(a, _offA + 16L);
-				long _a3 = UNSAFE.getLong(a, _offA + 24L);
+				long _a0 = UNSAFE.getLong(a, _offA00);
+				long _a1 = UNSAFE.getLong(a, _offA08);
+				long _a2 = UNSAFE.getLong(a, _offA16);
+				long _a3 = UNSAFE.getLong(a, _offA24);
 				// read 32 bytes from array b
-				long _b0 = UNSAFE.getLong(b, _offB);
-				long _b1 = UNSAFE.getLong(b, _offB + 8L);
-				long _b2 = UNSAFE.getLong(b, _offB + 16L);
-				long _b3 = UNSAFE.getLong(b, _offB + 24L);
+				long _b0 = UNSAFE.getLong(b, _offB00);
+				long _b1 = UNSAFE.getLong(b, _offB00 + 8L);
+				long _b2 = UNSAFE.getLong(b, _offB00 + 16L);
+				long _b3 = UNSAFE.getLong(b, _offB00 + 24L);
 				// compare each block
 				if (_a0 != _b0) {
-					return (int) (_offA + len - _maxA) + numLeadingBytesMatch(_a0, _b0);
+					return (int) (_offA00 + len - _maxA) + numLeadingBytesMatch(_a0, _b0);
 				}
 				if (_a1 != _b1) {
-					return (int) (_offA + 8L + len - _maxA) + numLeadingBytesMatch(_a1, _b1);
+					return (int) (_offA08 + len - _maxA) + numLeadingBytesMatch(_a1, _b1);
 				}
 				if (_a2 != _b2) {
-					return (int) (_offA + 16L + len - _maxA) + numLeadingBytesMatch(_a2, _b2);
+					return (int) (_offA16 + len - _maxA) + numLeadingBytesMatch(_a2, _b2);
 				}
 				if (_a3 != _b3) {
-					return (int) (_offA + 24L + len - _maxA) + numLeadingBytesMatch(_a3, _b3);
+					return (int) (_offA24 + len - _maxA) + numLeadingBytesMatch(_a3, _b3);
 				}
 			}
-			// compare 16 (2x8) bytes in parallel
-			for (long m = _maxA - 7L; _offA < m; _offA += 8L, _offB += 8L) {
-				long _a0 = UNSAFE.getLong(a, _offA);
-				long _b0 = UNSAFE.getLong(b, _offB);
+			// compare 16 (2*8) bytes in parallel
+			for (long m = _maxA - 7L; _offA00 < m; _offA00 += 8L, _offB00 += 8L) {
+				long _a0 = UNSAFE.getLong(a, _offA00);
+				long _b0 = UNSAFE.getLong(b, _offB00);
 				if (_a0 != _b0) {
-					return (int) (_offA + len - _maxA) + numLeadingBytesMatch(_a0, _b0);
+					return (int) (_offA00 + len - _maxA) + numLeadingBytesMatch(_a0, _b0);
 				}
 			}
-			// compare 2 (2x1) bytes in parallel (faster than using UNSAFE)
+			// compare 2 (2*1) bytes in parallel using regular array access (faster than using Unsafe).
 			// restore regular offsets
-			offA = (int) (_offA - BYTE_ARRAY_BASE_OFFSET);
-			offB = (int) (_offB - BYTE_ARRAY_BASE_OFFSET);
+			offA = (int) (_offA00 - BYTE_ARRAY_BASE_OFFSET);
+			offB = (int) (_offB00 - BYTE_ARRAY_BASE_OFFSET);
 			for (int m = (int) (_maxA - BYTE_ARRAY_BASE_OFFSET); offA < m; offA++, offB++) {
 				if (a[offA] != b[offB]) {
 					return offA + len - m;
@@ -184,10 +199,59 @@ abstract class UnsafeBytes {
 			}
 			return len;
 		}
+
+		// TODO needs speed testing
+		private void _fillWith(byte[] a, int off, int len, long x, byte n) {
+			long _off = BYTE_ARRAY_BASE_OFFSET + off;
+			long _max = _off + len;
+			// fill 32 (4*8) bytes in parallel (JIT generally does not unroll long-based loops)
+			for (long m = _max - 31L; _off < m; _off += 32L) {
+				UNSAFE.putLong(a, _off, x);
+				UNSAFE.putLong(a, _off + 8L, x);
+				UNSAFE.putLong(a, _off + 16L, x);
+				UNSAFE.putLong(a, _off + 24L, x);
+			}
+			// fill 8 (1*8) bytes
+			for (long m = _max - 7L; _off < m; _off += 8L) {
+				UNSAFE.putLong(a, _off, x);
+			}
+			// restore regular offsets and do a regular loop
+			off = (int) (_off - BYTE_ARRAY_BASE_OFFSET);
+			for (int m = (int) (_max - BYTE_ARRAY_BASE_OFFSET); off < m; off++) {
+				a[off] = n;
+			}
+		}
+
+		private void _fillNormally(byte[] a, int off, int len, byte n) {
+			for (int m = off + len; off < m; off++) {
+				a[off] = n;
+			}
+		}
+
+		@Override
+		final void fillWithZeros(byte[] a, int off, int len) {
+			if (len > 63) {
+				_fillWith(a, off, len, 0L, (byte) 0);
+			} else {
+				_fillNormally(a, off, len, (byte) 0);
+			}
+		}
+
+		@Override
+		final void fill(byte[] a, int off, int len, byte n) {
+			if (len > 63) {
+				long x = n & 0xffL;
+				x |= x << 8;
+				x |= x << 16;
+				x |= x << 32;
+				_fillWith(a, off, len, x, n);
+			} else {
+				_fillNormally(a, off, len, n);
+			}
+		}
 	}
 
-	// conventional implementation
-	private static final class BytesSafe extends UnsafeBytes {
+	private static final class BytesSafe extends FastBytes {
 
 		@Override
 		char getCharLE(byte[] b, int off) {
@@ -240,41 +304,41 @@ abstract class UnsafeBytes {
 					| (b[off + 7] & 0xffL);
 		}
 		@Override
-		void putCharLE(byte[] b, int off, char n) {
+		void putCharLE(char n, byte[] b, int off) {
 			b[off + 0] = (byte) (n);
 			b[off + 1] = (byte) (n >>> 8);
 		}
 		@Override
-		void putCharBE(byte[] b, int off, char n) {
+		void putCharBE(char n, byte[] b, int off) {
 			b[off + 0] = (byte) (n >>> 8);
 			b[off + 1] = (byte) (n);
 		}
 		@Override
-		void putShortLE(byte[] b, int off, short n) {
+		void putShortLE(short n, byte[] b, int off) {
 			b[off + 0] = (byte) (n);
 			b[off + 1] = (byte) (n >>> 8);
 		}
 		@Override
-		void putShortBE(byte[] b, int off, short n) {
+		void putShortBE(short n, byte[] b, int off) {
 			b[off + 0] = (byte) (n >>> 8);
 			b[off + 1] = (byte) (n);
 		}
 		@Override
-		void putIntLE(byte[] b, int off, int n) {
+		void putIntLE(int n, byte[] b, int off) {
 			b[off + 0] = (byte) (n);
 			b[off + 1] = (byte) (n >>> 8);
 			b[off + 2] = (byte) (n >>> 16);
 			b[off + 3] = (byte) (n >>> 24);
 		}
 		@Override
-		void putIntBE(byte[] b, int off, int n) {
+		void putIntBE(int n, byte[] b, int off) {
 			b[off + 0] = (byte) (n >>> 24);
 			b[off + 1] = (byte) (n >>> 16);
 			b[off + 2] = (byte) (n >>> 8);
 			b[off + 3] = (byte) (n);
 		}
 		@Override
-		void putLongLE(byte[] b, int off, long n) {
+		void putLongLE(long n, byte[] b, int off) {
 			b[off + 0] = (byte) (n);
 			b[off + 1] = (byte) (n >>> 8);
 			b[off + 2] = (byte) (n >>> 16);
@@ -285,7 +349,7 @@ abstract class UnsafeBytes {
 			b[off + 7] = (byte) (n >>> 56);
 		}
 		@Override
-		void putLongBE(byte[] b, int off, long n) {
+		void putLongBE(long n, byte[] b, int off) {
 			b[off + 0] = (byte) (n >>> 56);
 			b[off + 1] = (byte) (n >>> 48);
 			b[off + 2] = (byte) (n >>> 40);
@@ -304,6 +368,18 @@ abstract class UnsafeBytes {
 				}
 			}
 			return len;
+		}
+		@Override
+		void fillWithZeros(byte[] a, int off, int len) {
+			for (int m = off + len; off < m; off++) {
+				a[off] = 0;
+			}
+		}
+		@Override
+		void fill(byte[] a, int off, int len, byte n) {
+			for (int m = off + len; off < m; off++) {
+				a[off] = n;
+			}
 		}
 	}
 
@@ -334,27 +410,27 @@ abstract class UnsafeBytes {
 			return UNSAFE.getDouble(b, BYTE_ARRAY_BASE_OFFSET + off);
 		}
 		@Override
-		void putCharLE(byte[] b, int off, char n) {
+		void putCharLE(char n, byte[] b, int off) {
 			UNSAFE.putChar(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putShortLE(byte[] b, int off, short n) {
+		void putShortLE(short n, byte[] b, int off) {
 			UNSAFE.putShort(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putIntLE(byte[] b, int off, int n) {
+		void putIntLE(int n, byte[] b, int off) {
 			UNSAFE.putInt(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putFloatLE(byte[] b, int off, float n) {
+		void putFloatLE(float n, byte[] b, int off) {
 			UNSAFE.putFloat(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putLongLE(byte[] b, int off, long n) {
+		void putLongLE(long n, byte[] b, int off) {
 			UNSAFE.putLong(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putDoubleLE(byte[] b, int off, double n) {
+		void putDoubleLE(double n, byte[] b, int off) {
 			UNSAFE.putDouble(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
@@ -374,24 +450,24 @@ abstract class UnsafeBytes {
 			return Long.reverseBytes(getLongLE(b, off));
 		}
 		@Override
-		void putCharBE(byte[] b, int off, char n) {
-			putCharLE(b, off, Character.reverseBytes(n));
+		void putCharBE(char n, byte[] b, int off) {
+			putCharLE(Character.reverseBytes(n), b, off);
 		}
 		@Override
-		void putShortBE(byte[] b, int off, short n) {
-			putShortLE(b, off, Short.reverseBytes(n));
+		void putShortBE(short n, byte[] b, int off) {
+			putShortLE(Short.reverseBytes(n), b, off);
 		}
 		@Override
-		void putIntBE(byte[] b, int off, int n) {
-			putIntLE(b, off, Integer.reverseBytes(n));
+		void putIntBE(int n, byte[] b, int off) {
+			putIntLE(Integer.reverseBytes(n), b, off);
 		}
 		@Override
-		void putLongBE(byte[] b, int off, long n) {
-			putLongLE(b, off, Long.reverseBytes(n));
+		void putLongBE(long n, byte[] b, int off) {
+			putLongLE(Long.reverseBytes(n), b, off);
 		}
 		@Override
 		int numLeadingBytesMatch(long a, long b) {
-			// if UNSAFE reads in little endian, must compare lower-value bytes
+			// if UNSAFE reads in little endian, must compare low bytes
 			return Long.numberOfTrailingZeros(a ^ b) >>> 3;
 		}
 	}
@@ -417,20 +493,20 @@ abstract class UnsafeBytes {
 			return Long.reverseBytes(getLongBE(b, off));
 		}
 		@Override
-		void putCharLE(byte[] b, int off, char n) {
-			putCharBE(b, off, Character.reverseBytes(n));
+		void putCharLE(char n, byte[] b, int off) {
+			putCharBE(Character.reverseBytes(n), b, off);
 		}
 		@Override
-		void putShortLE(byte[] b, int off, short n) {
-			putShortBE(b, off, Short.reverseBytes(n));
+		void putShortLE(short n, byte[] b, int off) {
+			putShortBE(Short.reverseBytes(n), b, off);
 		}
 		@Override
-		void putIntLE(byte[] b, int off, int n) {
-			putIntBE(b, off, Integer.reverseBytes(n));
+		void putIntLE(int n, byte[] b, int off) {
+			putIntBE(Integer.reverseBytes(n), b, off);
 		}
 		@Override
-		void putLongLE(byte[] b, int off, long n) {
-			putLongBE(b, off, Long.reverseBytes(n));
+		void putLongLE(long n, byte[] b, int off) {
+			putLongBE(Long.reverseBytes(n), b, off);
 		}
 		@Override
 		char getCharBE(byte[] b, int off) {
@@ -457,32 +533,32 @@ abstract class UnsafeBytes {
 			return UNSAFE.getDouble(b, BYTE_ARRAY_BASE_OFFSET + off);
 		}
 		@Override
-		void putCharBE(byte[] b, int off, char n) {
+		void putCharBE(char n, byte[] b, int off) {
 			UNSAFE.putChar(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putShortBE(byte[] b, int off, short n) {
+		void putShortBE(short n, byte[] b, int off) {
 			UNSAFE.putShort(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putIntBE(byte[] b, int off, int n) {
+		void putIntBE(int n, byte[] b, int off) {
 			UNSAFE.putInt(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putFloatBE(byte[] b, int off, float n) {
+		void putFloatBE(float n, byte[] b, int off) {
 			UNSAFE.putFloat(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putLongBE(byte[] b, int off, long n) {
+		void putLongBE(long n, byte[] b, int off) {
 			UNSAFE.putLong(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
-		void putDoubleBE(byte[] b, int off, double n) {
+		void putDoubleBE(double n, byte[] b, int off) {
 			UNSAFE.putDouble(b, BYTE_ARRAY_BASE_OFFSET + off, n);
 		}
 		@Override
 		int numLeadingBytesMatch(long a, long b) {
-			// if UNSAFE reads in big endian, must compare higher-value bytes
+			// if UNSAFE reads in big endian, must compare high bytes
 			return Long.numberOfLeadingZeros(a ^ b) >>> 3;
 		}
 	}

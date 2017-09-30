@@ -6,52 +6,41 @@
 package org.bitsandpieces.util.io;
 
 import java.nio.channels.FileChannel;
-import java.util.ConcurrentModificationException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.zip.Checksum;
+import java.util.function.IntPredicate;
 import java.util.zip.Inflater;
+import org.bitsandpieces.util.Encoding.Decoder;
+import org.bitsandpieces.util.Encoding.Encoder;
 import org.bitsandpieces.util.Endian;
-import org.bitsandpieces.util.encoding.Decoder;
-import org.bitsandpieces.util.encoding.Encoder;
 
 /**
- * Suitable for any kind of underlying source, excellent sequential access in
- * both directions.
+ * General solution. Works for any kind of IOSource. Very efficient.
  *
  * @author Jan Kebernik
  */
-final class GeneralIOBuffer extends AbstractIOBuffer {
+final class GeneralIOBuffer extends IOBuffer {
 
-	// required to be at least 8 for readFixed and writeFixed to work 
-	// correctly for all primitive types
 	private static final int MIN_BUFFER_SIZE = 8;
 	private static final byte[] EMPTY = {};
-	private static final ObjectCache<StringBuilder> CB_CACHE = new ObjectCache<>(() -> new StringBuilder());
+	private static final ObjectCache<StringBuilder> BUILDER_CACHE = new ObjectCache<>(() -> new StringBuilder());
+
+	private final int bufferSize;
+	private final byte[] buffer;
+	private final StringBuilder sb;
+
+	private final AtomicBoolean closed;
 
 	private long bufPos;
 	private int bufLen;
 	private boolean bufMod;
-
-	/*
-	 * the reason we don't use buffer.length is that the cost of re-buffering
-	 * directly scales with this value. buffer.length might be significantly
-	 * larger than bufferSize, which, under certain circumstances, could lead to
-	 * more bytes being buffered than is desired. It's a simple and cheap way to
-	 * weight costs and as such certainly worth the minor redundancy.
-	 */
-	private final int bufferSize;
-	private final byte[] buffer;
-	private final StringBuilder cb;
-
-	private final AtomicBoolean closed;
 
 	GeneralIOBuffer(IOSource source) throws IOException {
 		super(source);
 		this.closed = new AtomicBoolean();
 		this.bufferSize = BufferCache.DEFAULT_SIZE;
 		this.buffer = BufferCache.requestBuffer();
-		this.cb = CB_CACHE.requestInstance();
+		this.sb = BUILDER_CACHE.requestInstance();
 	}
 
 	GeneralIOBuffer(IOSource source, int bufferSize) throws IOException {
@@ -62,7 +51,7 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		this.closed = new AtomicBoolean();
 		this.bufferSize = bufferSize;
 		this.buffer = BufferCache.requestBuffer(bufferSize);
-		this.cb = CB_CACHE.requestInstance();
+		this.sb = BUILDER_CACHE.requestInstance();
 	}
 
 	GeneralIOBuffer(IOSource source, AtomicInteger shared) throws IOException {
@@ -70,7 +59,7 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		this.closed = new AtomicBoolean();
 		this.bufferSize = BufferCache.DEFAULT_SIZE;
 		this.buffer = BufferCache.requestBuffer();
-		this.cb = CB_CACHE.requestInstance();
+		this.sb = BUILDER_CACHE.requestInstance();
 	}
 
 	GeneralIOBuffer(IOSource source, AtomicInteger shared, int bufferSize) throws IOException {
@@ -81,32 +70,18 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		this.closed = new AtomicBoolean();
 		this.bufferSize = bufferSize;
 		this.buffer = BufferCache.requestBuffer(bufferSize);
-		this.cb = CB_CACHE.requestInstance();
-	}
-
-	private void checkSharedArray(byte[] buf) {
-		if (buf == this.buffer) {
-			// TODO use assert instead.
-			throw new IllegalStateException("Leaked internal array detected.");
-		}
-	}
-
-	@Override
-	void ensureOpen() throws IOException {
-		if (this.closed.get()) {
-			throw new IOException("Buffer closed");
-		}
+		this.sb = BUILDER_CACHE.requestInstance();
 	}
 
 	@Override
 	public void close() throws IOException {
-		// atomically close, no effect if already closed (idempotent).
+		// atomically close, idempotent.
 		if (this.closed.compareAndSet(false, true)) {
 			try {
-				flush();
+				_flush();
 			} finally {
 				try {
-					CB_CACHE.releaseInstance(this.cb);
+					BUILDER_CACHE.releaseInstance(this.sb);
 				} finally {
 					try {
 						BufferCache.releaseBuffer(this.buffer);
@@ -118,84 +93,46 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		}
 	}
 
-	private void flush(long bpos, int blen) throws IOException {
-		if (this.bufMod) {
-			doFlush(bpos, blen);
+	@Override
+	void _ensureOpen() throws IOException {
+		if (this.closed.get()) {
+			throw new IOException("IOBuffer was closed.");
 		}
 	}
 
-	private void flush() throws IOException {
+	private void _flush() throws IOException {
 		if (this.bufMod) {
-			doFlush(this.bufPos, this.bufLen);
+			// rationale: save reading in two values unless bufMod true, which is rare
+			_forceFlush(this.bufPos, this.bufLen);
 		}
 	}
 
-	private void doFlush(long bpos, int blen) throws IOException {
+	private void _flush(long bpos, int blen) throws IOException {
+		if (this.bufMod) {
+			_forceFlush(bpos, blen);
+		}
+	}
+
+	private void _forceFlush(long bpos, int blen) throws IOException {
 		this.source.write(bpos, this.buffer, 0, blen);
+		// if flusing fails, the buffer remains unflushed.
+		// if any operation requires a rebuffer, 
+		// then it won't complete until the buffer is flushed, 
+		// possibly throwing another exception as a result if 
+		// flushing fails again.
+		// this is the intended behaviour. the user  
+		// has to determine the cause themselves (drive full/disconnected, 
+		// file way too big, etc...), if the wrapped exception 
+		// is not informative in of itself.
 		this.bufMod = false;
 	}
-
-	private int mustRead(long pos, byte[] buf, int off, int len) throws IOException {
-		for (int n = 0; n != len;) {
-			int r = this.source.read(pos + n, buf, off + n, len - n);
-			if (r < 0) {
-				throw new IOException("Unexpected EOF");
-			}
-			n += r;
-		}
-		return len;
+	@Override
+	IOBuffer createSibling() throws IOException {
+		_ensureOpen();	// for flush
+		_flush();		// sync sibling with this buffer
+		return new GeneralIOBuffer(this.source, this.shared, this.bufferSize);
 	}
 
-	private int readRebuffer(long pos, long npos, long s) throws IOException {
-		this.bufLen = 0;
-		int k = (int) Math.min(s - npos, this.bufferSize);
-		mustRead(npos, this.buffer, 0, k);
-		this.bufPos = npos;
-		this.bufLen = k;
-		return (int) (pos - npos);
-	}
-
-	// TODO verify correctness
-	// off = offset into new buffer
-	// len = extra length to be written to buffer
-	// npos = new buffer position
-	// blen = current buffer length (snapshot)
-	// s = current size
-	// if this is bad, fall back on commented-out old way. and re-think. else, great!
-	private int writeRebuffer(int off, int len, long npos, int blen, long s) throws IOException {
-		if (off > blen) {
-			// only read in existing bytes if offset into buffer greater than buffer length (gap exists)
-			if (npos < s) {
-				int k = (int) Math.min(s - npos, this.bufferSize - blen);
-				blen += mustRead(npos, this.buffer, blen, k);
-			}
-			// fill remaining gap (if any) with 0s
-			for (; blen < off; blen++) {
-				this.buffer[blen] = 0;
-			}
-		}
-		// else just return offset into buffer
-		// either way, update buffer length for incoming copy-write, if necessary
-		this.bufLen = Math.max(blen, off + len);
-		return off;
-	}
-
-//	// off = offset into new buffer
-//	// len = extra length to be written to buffer
-//	// npos = new buffer position
-//	// blen = current buffer length (snapshot)
-//	// s = current size
-//	private int writeRebuffer(int off, int len, long npos, int blen, long s) throws IOException {
-//		if (npos < s) {
-//			int k = (int) Math.min(s - npos, this.bufferSize - blen);
-//			blen += mustRead(npos, this.buffer, blen, k);
-//		}
-//		for (; blen < off; blen++) {
-//			this.buffer[blen] = 0;
-//		}
-//		this.bufLen = Math.max(blen, off + len);
-//		return off;
-//	}
 	@Override
 	void _truncate(long size) throws IOException {
 		if (size < this.size) {
@@ -215,539 +152,667 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		}
 	}
 
-	@Override
-	void _read(long pos, long pos_len, long s, byte[] buf, int off, int len) throws IOException {
-		checkSharedArray(buf);
+	// reads "len" bytes starting at "pos" into "buf" at "off"
+	private int _mustRead(long pos, byte[] buf, int off, int len) throws IOException {
+		for (int n = 0; n != len;) {
+			int r = this.source.read(pos + n, buf, off + n, len - n);
+			if (r < 0) {
+				throw new IOException("Unexpected EOF");
+			}
+			n += r;
+		}
+		return len;
+	}
+
+	// starts and fills a new buffer at "npos" and returns the offset into it
+	// based on target "pos" along source.
+	private int _readRebuffer(long pos, long npos, long s) throws IOException {
+		this.bufLen = 0;	// required in case of errors
+		int k = (int) Math.min(s - npos, this.bufferSize);
+		_mustRead(npos, this.buffer, 0, k);
+		this.bufPos = npos;
+		this.bufLen = k;
+		return (int) (pos - npos);
+	}
+
+	// used for very small reads that require the array to contain all bytes for 
+	// the op. returns offset into array for the read op. immune to integer overflow.
+	// favours sequential access in the same direction, meaning that the 
+	// buffer moves in the trajectory of any repeated access.
+	private int _readFixed(long pos, long pos_len, long s) throws IOException {
 		long bpos = this.bufPos;
 		int blen = this.bufLen;
-		long bpos_blen = bpos + blen;
 		if (pos < bpos) {
-			// start before
-			flush(bpos, blen);
+			// op starts before buffer
+			_flush(bpos, blen);	// requires full rebuffer
 			if (pos_len <= bpos) {
-				// stop before
-				if (len >= this.bufferSize) {
-					mustRead(pos, buf, off, len);
-					return;
+				// op stops before buffer
+				// try moving buffer left
+				long start = bpos - Math.min(bpos, this.bufferSize);
+				if (pos >= start) {
+					// move buffer left
+					return _readRebuffer(pos, start, s);
 				}
-				long npos = Math.min(pos, bpos - Math.min(bpos, this.bufferSize));
-				int f = readRebuffer(pos, npos, s);
-				System.arraycopy(this.buffer, f, buf, off, len);
-				return;
+				// moving left insufficient
 			}
-			if (pos_len <= bpos_blen) {
-				// stop inside
-				int x = (int) (pos_len - bpos);
-				int r = len - x;
-				System.arraycopy(this.buffer, 0, buf, off + r, x);
-				if (r >= this.bufferSize) {
-					mustRead(pos, buf, off, r);
-					return;
-				}
-				long npos = bpos - Math.min(bpos, this.bufferSize);
-				int f = readRebuffer(pos, npos, s);
-				System.arraycopy(this.buffer, f, buf, off, r);
-				return;
-			}
-			// stop after
-			if (len >= this.bufferSize) {
-				mustRead(pos, buf, off, len);
-				return;
-			}
-			readRebuffer(pos, pos, s);
-			System.arraycopy(this.buffer, 0, buf, off, len);
-			return;
+			// else: op stops inside buffer
+			// move buffer as far left as possible (anchored to op)
+			long npos = pos_len - Math.min(pos_len, this.bufferSize);
+			return _readRebuffer(pos, npos, s);
 		}
+		// op starts inside or after buffer
+		long bpos_blen = bpos + blen;
 		if (pos_len > bpos_blen) {
-			// stop after
-			flush(bpos, blen);
-			if (pos >= bpos_blen) {
-				// start after
+			// op stops after buffer
+			long bcap = bpos + Math.min(s - bpos, this.bufferSize);
+			if (pos_len > bcap) {
+				// op stops after buffer capacity
+				_flush(bpos, blen);	// requires full rebuffer
+				if (pos >= bpos_blen) {
+					// op starts after buffer
+					// try moving buffer right
+					long end = bpos_blen + Math.min(Long.MAX_VALUE - bpos_blen, this.bufferSize);
+					if (pos_len <= end) {
+						// move buffer right
+						return _readRebuffer(pos, bpos_blen, s);
+					}
+					// moving right insufficient
+				}
+				// else: op starts inside buffer
+				// move buffer to pos
+				return _readRebuffer(pos, pos, s);
+			}
+			// op starts and stops inside buffer capacity
+			// fill the buffer (better buffer movement)
+			this.bufLen += _mustRead(bpos_blen, this.buffer, blen, (int) (bcap - bpos_blen));
+		}
+		// op starts and stops inside buffer
+		return (int) (pos - bpos);
+	}
+
+	// used for arbitrary reads. immune to integer overflow. 
+	// favours sequential access in the same direction, meaning that the 
+	// buffer moves in the trajectory of any repeated access. 
+	@Override
+	void _read(long pos, long pos_len, long s, byte[] buf, int off, int len) throws IOException {
+		long bpos = this.bufPos;
+		int blen = this.bufLen;
+		if (pos < bpos) {
+			// op starts before buffer
+			_flush(bpos, blen);	// required in all cases
+			if (pos_len <= bpos) {
+				// op stops before buffer
 				if (len >= this.bufferSize) {
-					mustRead(pos, buf, off, len);
+					// don't bother buffering
+					_mustRead(pos, buf, off, len);
 					return;
 				}
-				long end = bpos_blen + this.bufferSize;
-				if (end < 0L || end >= pos_len) {
-					int f = readRebuffer(pos, bpos_blen, s);
+				// try moving buffer left
+				long start = bpos - Math.min(bpos, this.bufferSize);
+				if (pos >= start) {
+					// move buffer left
+					int f = _readRebuffer(pos, start, s);
 					System.arraycopy(this.buffer, f, buf, off, len);
 					return;
 				}
-				long npos = pos_len - this.bufferSize;
-				int f = readRebuffer(pos, npos, s);
+				// moving left insufficient
+				// move buffer as far left as possible (anchored to op)
+				long npos = pos_len - Math.min(pos_len, this.bufferSize);
+				int f = _readRebuffer(pos, npos, s);
 				System.arraycopy(this.buffer, f, buf, off, len);
 				return;
 			}
-			// start inside
-			int x = (int) (pos - bpos);
-			int y = blen - x;
-			int r = len - y;
-			System.arraycopy(this.buffer, x, buf, off, y);
-			if (r >= this.bufferSize) {
-				mustRead(bpos_blen, buf, off + y, r);
+			// op stops inside or after buffer
+			long bpos_blen = bpos + blen;
+			if (pos_len <= bpos_blen) {
+				// op stops inside buffer
+				// complete tail-end of op
+				int x = (int) (pos_len - bpos);
+				int r = len - x;
+				System.arraycopy(this.buffer, 0, buf, off + r, x);
+				// complete remainder of op
+				if (r >= this.bufferSize) {
+					// don't bother buffering
+					_mustRead(pos, buf, off, r);
+					return;
+				}
+				// move buffer left
+				long npos = bpos - Math.min(bpos, this.bufferSize);
+				int f = _readRebuffer(pos, npos, s);
+				System.arraycopy(this.buffer, f, buf, off, r);
 				return;
 			}
-			readRebuffer(bpos_blen, bpos_blen, s);
-			System.arraycopy(this.buffer, 0, buf, off + y, r);
+			// op stops after buffer
+			if (len >= this.bufferSize) {
+				// don't bother buffering
+				_mustRead(pos, buf, off, len);
+				return;
+			}
+			// move buffer left as far as possible (anchor to op)
+			long npos = pos_len - Math.min(pos_len, this.bufferSize);
+			int f = _readRebuffer(pos, npos, s);
+			System.arraycopy(this.buffer, f, buf, off, len);
 			return;
 		}
-		int f = (int) (pos - bpos);
-		System.arraycopy(this.buffer, f, buf, off, len);
+		// op starts inside or after buffer
+		long bpos_blen = bpos + blen;
+		if (pos_len > bpos_blen) {
+			// op stops after buffer
+			long bcap = bpos + Math.min(s - bpos, this.bufferSize);
+			if (pos_len > bcap) {
+				// op stops after buffer capacity
+				_flush(bpos, blen);	// required in all cases
+				if (pos >= bpos_blen) {
+					// op starts after buffer
+					if (len >= this.bufferSize) {
+						// don't bother buffering
+						_mustRead(pos, buf, off, len);
+						return;
+					}
+					// try moving buffer right
+					long end = bpos_blen + Math.min(Long.MAX_VALUE - bpos_blen, this.bufferSize);
+					if (pos_len <= end) {
+						// move buffer right
+						int f = _readRebuffer(pos, bpos_blen, s);
+						System.arraycopy(this.buffer, f, buf, off, len);
+						return;
+					}
+					// moving right insufficient
+					// move buffer to pos
+					_readRebuffer(pos, pos, s);
+					System.arraycopy(this.buffer, 0, buf, off, len);
+					return;
+				}
+				// op starts inside buffer
+				// complete head-end of op
+				int x = (int) (pos - bpos);
+				int y = blen - x;
+				int r = len - y;
+				System.arraycopy(this.buffer, x, buf, off, y);
+				// complete remainder of op
+				if (r >= this.bufferSize) {
+					// don't bother buffering
+					_mustRead(bpos_blen, buf, off + y, r);
+					return;
+				}
+				// move buffer right
+				_readRebuffer(bpos_blen, bpos_blen, s);
+				System.arraycopy(this.buffer, 0, buf, off + y, r);
+				return;
+			}
+			// op starts and stops inside buffer capacity
+			// fill the buffer (better buffer movement)
+			this.bufLen += _mustRead(bpos_blen, this.buffer, blen, (int) (bcap - bpos_blen));
+		}
+		// op starts and stops inside buffer
+		System.arraycopy(this.buffer, (int) (pos - bpos), buf, off, len);
+	}
+
+	// assumption: at least one byte is available for reading
+	// ensures that as many bytes as possible (and at least one) are 
+	// available for reading in the array at "pos". But will only rebuffer
+	// if no bytes are available at all.
+	// returns the offset into the array.
+	// favours forward sequential access.
+	int _readSeek(long pos, long s) throws IOException {
+		long bpos = this.bufPos;
+		int blen = this.bufLen;
+		if (pos < bpos) {
+			// op starts before buffer
+			_flush(bpos, blen);	// requires full rebuffer
+			_readRebuffer(pos, pos, s);
+			return 0;
+		}
+		// op starts inside or after buffer
+		long bpos_blen = bpos + blen;
+		if (pos >= bpos_blen) {
+			// op stops after buffer
+			long bcap = bpos + Math.min(s - bpos, this.bufferSize);
+			if (pos >= bcap) {
+				// op stops after buffer capacity
+				_flush(bpos, blen);	// requires full rebuffer
+				_readRebuffer(pos, pos, s);
+				return 0;
+			}
+			// op starts and stops inside buffer capacity
+			// fill the buffer (better buffer movement)
+			this.bufLen += _mustRead(bpos_blen, this.buffer, blen, (int) (bcap - bpos_blen));
+		}
+		// op starts and stops inside buffer
+		return (int) (pos - bpos);
+	}
+
+	// sets up a new buffer and fills it only if necessary.
+	// updates bufLen and size for write op.
+	// bufLen may have to be reset prior to calling this method.
+	// returns given offset into array.
+	private int _writeRebuffer(int off, int len, long pos_len, long npos, int blen, long s) throws IOException {
+		if (off > blen) {
+			// only read in bytes if a gap is created
+			if (npos < s) {
+				// and only if there are any bytes available at all
+				int k = (int) Math.min(s - npos, this.bufferSize - blen);
+				blen += _mustRead(npos, this.buffer, blen, k);
+			}
+			// fill remaining gap, if any, with 0s
+			FastZeros.INSTANCE.fillWithZeros(this.buffer, blen, off - blen);
+		}
+		// update bufLen and size for the write op about to happen
+		this.bufLen = Math.max(blen, off + len);
+		if (pos_len > s) {
+			this.size = pos_len;
+		}
+		this.bufMod = true;
+		return off;
+	}
+
+	// used for very small writes that require the array to have space for all bytes for 
+	// the op. returns offset into array for the write op. immune to integer overflow.
+	// favours sequential access in the same direction, meaning that the 
+	// buffer moves in the trajectory of any repeated access.
+	private int _writeFixed(long pos, int len, long pos_len) throws IOException {
+		long s = this.size;
+		long bpos = this.bufPos;
+		int blen = this.bufLen;
+		if (pos < bpos) {
+			// op starts before buffer
+			_flush(bpos, blen);	// requires full rebuffer
+			if (pos_len <= bpos) {
+				// op stops before buffer
+				// try moving buffer left
+				long start = bpos - Math.min(bpos, this.bufferSize);
+				if (pos >= start) {
+					// move buffer left
+					return _writeRebuffer((int) (pos - start), len, pos_len, this.bufPos = start, this.bufLen = 0, s);
+				}
+				// moving left insufficient
+			}
+			// else: op stops inside buffer
+			// move buffer as far left as possible (anchored to op)
+			long npos = pos_len - Math.min(pos_len, this.bufferSize);
+			return _writeRebuffer((int) (pos - npos), len, pos_len, this.bufPos = npos, this.bufLen = 0, s);
+		}
+		// op starts inside or after buffer
+		long bpos_blen = bpos + blen;
+		if (pos_len > bpos_blen) {
+			// op stops after buffer
+			long bcap = bpos + Math.min(s - bpos, this.bufferSize);
+			if (pos_len > bcap) {
+				// op stops after buffer capacity
+				_flush(bpos, blen);	// requires full rebuffer
+				if (pos >= bpos_blen) {
+					// op starts after buffer
+					// try moving buffer right
+					long end = bpos_blen + Math.min(Long.MAX_VALUE - bpos_blen, this.bufferSize);
+					if (pos_len <= end) {
+						// move buffer right
+						return _writeRebuffer((int) (pos - bpos_blen), len, pos_len, this.bufPos = bpos_blen, this.bufLen = 0, s);
+					}
+					// moving right insufficient
+				}
+				// else: op starts inside buffer
+				// move buffer to pos
+				return _writeRebuffer(0, len, pos_len, this.bufPos = pos, this.bufLen = 0, s);
+			}
+			// op starts and stops inside buffer capacity
+			// extend buffer
+			return _writeRebuffer((int) (pos - bpos), len, pos_len, bpos_blen, blen, s);
+		}
+		// op starts and stop inside buffer
+		this.bufMod = true;
+		return (int) (pos - bpos);
 	}
 
 	@Override
 	void _write(long pos, long pos_len, byte[] buf, int off, int len) throws IOException {
-		checkSharedArray(buf);
 		long s = this.size;
 		long bpos = this.bufPos;
 		int blen = this.bufLen;
-		long bpos_blen = bpos + blen;
 		if (pos < bpos) {
-			// start before
+			// op starts before buffer
 			if (pos_len <= bpos) {
-				// stop before
+				// op stops before buffer
 				if (len >= this.bufferSize) {
+					// don't bother buffering
+					// no need to flush
 					this.source.write(pos, buf, off, len);
 					if (pos_len > s) {
+						// can't really happen, but better safe than sorry
 						this.size = pos_len;
 					}
 					return;
 				}
-				flush(bpos, blen);
-				long npos = Math.min(pos, bpos - Math.min(bpos, this.bufferSize));
-				int f = writeRebuffer((int) (pos - npos), len, this.bufPos = npos, this.bufLen = 0, s);
-				System.arraycopy(buf, off, this.buffer, f, len);
-				this.bufMod = true;
-				if (pos_len > s) {
-					this.size = pos_len;
+				_flush(bpos, blen);
+				// try moving buffer left
+				long start = bpos - Math.min(bpos, this.bufferSize);
+				if (pos >= start) {
+					// move buffer left
+					int f = _writeRebuffer((int) (pos - start), len, pos_len, this.bufPos = start, this.bufLen = 0, s);
+					System.arraycopy(buf, off, this.buffer, f, len);
+					return;
 				}
+				// moving left insufficient
+				// move buffer as far left as possible (anchored to op)
+				long npos = pos_len - Math.min(pos_len, this.bufferSize);
+				int f = _writeRebuffer((int) (pos - npos), len, pos_len, this.bufPos = npos, this.bufLen = 0, s);
+				System.arraycopy(buf, off, this.buffer, f, len);
 				return;
 			}
+			// op stops inside or after buffer
+			long bpos_blen = bpos + blen;
 			if (pos_len <= bpos_blen) {
-				// stop inside
+				// op stops inside buffer
+				// complete tail-end of op
 				int x = (int) (pos_len - bpos);
 				int r = len - x;
 				System.arraycopy(buf, off + r, this.buffer, 0, x);
 				this.bufMod = true;
+				// complete remainder of op
 				if (r >= this.bufferSize) {
+					// don't bother buffering
+					// no need to flush
 					this.source.write(pos, buf, off, r);
 					if (pos_len > s) {
 						this.size = pos_len;
 					}
 					return;
 				}
-				this.source.write(bpos, this.buffer, 0, blen);	// flush
+				// flush buffer
+				this.source.write(bpos, this.buffer, 0, blen);
+				// move buffer left
 				long npos = bpos - Math.min(bpos, this.bufferSize);
-				int f = writeRebuffer((int) (pos - npos), r, this.bufPos = npos, this.bufLen = 0, s);
+				int f = _writeRebuffer((int) (pos - npos), r, pos_len, this.bufPos = npos, this.bufLen = 0, s);
 				System.arraycopy(buf, off, this.buffer, f, r);
-				if (pos_len > s) {
-					this.size = pos_len;
-				}
 				return;
 			}
-			// stop after
+			// op stops after buffer
 			if (len >= this.bufferSize) {
-				// write greater buffer cap. invalidate buffer alltogether.
+				// discard buffer entirely
 				this.bufLen = 0;
 				this.bufMod = false;
+				// don't bother buffering
 				this.source.write(pos, buf, off, len);
 				if (pos_len > s) {
 					this.size = pos_len;
 				}
 				return;
 			}
-			flush(bpos, blen);
-			writeRebuffer(0, len, this.bufPos = pos, this.bufLen = 0, s);
-			System.arraycopy(buf, off, this.buffer, 0, len);
-			this.bufMod = true;
-			if (pos_len > s) {
-				this.size = pos_len;
-			}
+			_flush(bpos, blen);
+			// move buffer left as as possible (anchored to op)
+			long npos = pos_len - Math.min(pos_len, this.bufferSize);
+			int f = _writeRebuffer((int) (pos - npos), len, pos_len, this.bufPos = npos, this.bufLen = 0, s);
+			System.arraycopy(buf, off, this.buffer, f, len);
 			return;
 		}
+		// op starts inside or after buffer
+		long bpos_blen = bpos + blen;
 		if (pos_len > bpos_blen) {
-			// stop after
-			if (blen != 0 && pos_len <= bpos + Math.min(Long.MAX_VALUE - bpos, this.bufferSize)) {
-				// extend buffer
-				int f = writeRebuffer((int) (pos - bpos), len, bpos_blen, blen, s);
-				System.arraycopy(buf, off, this.buffer, f, len);
-				this.bufMod = true;
-				if (pos_len > s) {
-					this.size = pos_len;
+			// op stops after buffer
+			long bcap = bpos + Math.min(s - bpos, this.bufferSize);
+			if (pos_len > bcap) {
+				// op stops after buffer capacity
+				if (pos >= bpos_blen) {
+					// op starts after buffer
+					if (len >= this.bufferSize) {
+						// don't bother buffering
+						// no need to flush
+						this.source.write(pos, buf, off, len);
+						if (pos_len > s) {
+							this.size = pos_len;
+						}
+						return;
+					}
+					_flush(bpos, blen);	// requires full rebuffer
+					// try moving buffer right
+					long end = bpos_blen + Math.min(Long.MAX_VALUE - bpos_blen, this.bufferSize);
+					if (pos_len <= end) {
+						// move buffer right
+						int f = _writeRebuffer((int) (pos - bpos_blen), len, pos_len, this.bufPos = bpos_blen, this.bufLen = 0, s);
+						System.arraycopy(buf, off, this.buffer, f, len);
+						return;
+					}
+					// moving right insufficient
+					// move buffer to pos
+					_writeRebuffer(0, len, pos_len, this.bufPos = pos, this.bufLen = 0, s);
+					System.arraycopy(buf, off, this.buffer, 0, len);
+					return;
 				}
-				return;
-			}
-			if (pos >= bpos_blen) {
-				// start after
-				if (len >= this.bufferSize) {
-					this.source.write(pos, buf, off, len);
+				// op starts inside buffer
+				// complete head-end of op
+				int x = (int) (pos - bpos);
+				int y = blen - x;
+				int r = len - y;
+				System.arraycopy(buf, off, this.buffer, x, y);
+				this.bufMod = true;
+				// complete remainder of op
+				if (r >= this.bufferSize) {
+					// don't bother buffering
+					// no need to flush
+					this.source.write(bpos_blen, buf, off + y, r);
 					if (pos_len > s) {
 						this.size = pos_len;
 					}
 					return;
 				}
-				flush(bpos, blen);
-				long end = bpos_blen + this.bufferSize;
-				if (end < 0L || end >= pos_len) {
-					int f = writeRebuffer((int) (pos - bpos_blen), len, this.bufPos = bpos_blen, this.bufLen = 0, s);
-					System.arraycopy(buf, off, this.buffer, f, len);
-					this.bufMod = true;
-					if (pos_len > s) {
-						this.size = pos_len;
-					}
-					return;
-				}
-				long npos = pos_len - this.bufferSize;
-				int f = writeRebuffer((int) (pos - npos), len, this.bufPos = npos, this.bufLen = 0, s);
-				System.arraycopy(buf, off, this.buffer, f, len);
-				this.bufMod = true;
-				if (pos_len > s) {
-					this.size = pos_len;
-				}
+				// flush buffefr
+				this.source.write(bpos, this.buffer, 0, blen);
+				// move buffer right
+				_writeRebuffer(0, len, pos_len, this.bufPos = bpos_blen, this.bufLen = 0, s);
+				System.arraycopy(buf, off + y, this.buffer, 0, r);
 				return;
 			}
-			// start inside
-			int x = (int) (pos - bpos);
-			int y = blen - x;
-			int r = len - y;
-			System.arraycopy(buf, off, this.buffer, x, y);
-			this.bufMod = true;
-			if (r >= this.bufferSize) {
-				this.source.write(bpos_blen, buf, off + y, r);
-				if (pos_len > s) {
-					this.size = pos_len;
-				}
-				return;
-			}
-			this.source.write(bpos, this.buffer, 0, blen);	// flush
-			writeRebuffer(0, r, this.bufPos = bpos_blen, this.bufLen = 0, s);
-			System.arraycopy(buf, off + y, this.buffer, 0, r);
-			if (pos_len > s) {
-				this.size = pos_len;
-			}
+			// ops starts and stops inside buffer capacity
+			// extend buffer
+			int f = _writeRebuffer((int) (pos - bpos), len, pos_len, bpos_blen, blen, s);
+			System.arraycopy(buf, off, this.buffer, f, len);
 			return;
 		}
-		int f = (int) (pos - bpos);
-		System.arraycopy(buf, off, this.buffer, f, len);
+		// op starts and stops inside buffer
 		this.bufMod = true;
+		System.arraycopy(buf, off, this.buffer, (int) (pos - bpos), len);
 	}
 
-	@Override
-	int _readFixed(long pos, int len, long pos_len, long s) throws IOException {
+	// assumtpion: at least one byte can be written
+	// prepares the array for a write request of unknown length.
+	// the buffer is flushed as necessary.
+	// if the request falls within the buffer capacity, 
+	// but outside the currently buffered range, the array will be filled
+	// and any gap between the buffer length and the returned offset is
+	// filled with 0s.
+	// the calling method must update bufLen and size by itself.
+	int _writeSeek(long pos, long s) throws IOException {
 		long bpos = this.bufPos;
 		int blen = this.bufLen;
 		if (pos < bpos) {
-			// start before buffer
-			flush(bpos, blen);
-			if (pos_len <= bpos) {
-				// stop before buffer
-				long npos = Math.min(pos, bpos - Math.min(bpos, this.bufferSize));
-				return readRebuffer(pos, npos, s);
-			}
-			// stop inside buffer
-			long npos = pos_len - Math.min(pos_len, this.bufferSize);
-			return readRebuffer(pos, npos, s);
-		}
-		long bpos_blen = bpos + blen;
-		if (pos_len > bpos_blen) {
-			// stop after buffer
-			flush(bpos, blen);
-			if (pos >= bpos_blen) {
-				// start after buffer
-				long end = bpos_blen + this.bufferSize;
-				if (end < 0L || end >= pos_len) {
-					return readRebuffer(pos, bpos_blen, s);
-				}
-				long npos = pos_len - this.bufferSize;
-				return readRebuffer(pos, npos, s);
-			}
-			// start inside buffer
-			return readRebuffer(pos, pos, s);
-		}
-		// start and stop inside buffer
-		return (int) (pos - bpos);
-	}
-
-	@Override
-	int _writeFixed(long pos, int len, long pos_len) throws IOException {
-		long s = this.size;
-		long bpos = this.bufPos;
-		int blen = this.bufLen;
-		if (pos < bpos) {
-			// start before buffer
-			flush(bpos, blen);
-			if (pos_len <= bpos) {
-				// stop before buffer
-				long npos = Math.min(pos, bpos - Math.min(bpos, this.bufferSize));
-				int n = writeRebuffer((int) (pos - npos), len, this.bufPos = npos, this.bufLen = 0, s);
-				if (pos_len > s) {
-					this.size = pos_len;
-				}
-				this.bufMod = true;
-				return n;
-			}
-			// stop inside buffer
-			long npos = pos_len - Math.min(pos_len, this.bufferSize);
-			int n = writeRebuffer((int) (pos - npos), len, this.bufPos = npos, this.bufLen = 0, s);
-			if (pos_len > s) {
-				this.size = pos_len;
-			}
-			this.bufMod = true;
-			return n;
-		}
-		long bpos_blen = bpos + blen;
-		if (pos_len > bpos_blen) {
-			// stop after buffer
-			if (blen != 0 && pos_len <= bpos + Math.min(Long.MAX_VALUE - bpos, this.bufferSize)) {
-				// extend buffer
-				int n = writeRebuffer((int) (pos - bpos), len, bpos_blen, blen, s);
-				if (pos_len > s) {
-					this.size = pos_len;
-				}
-				this.bufMod = true;
-				return n;
-			}
-			flush(bpos, blen);
-			if (pos >= bpos_blen) {
-				// start after buffer
-				long end = bpos_blen + this.bufferSize;
-				if (end < 0L || end >= pos_len) {
-					int n = writeRebuffer((int) (pos - bpos_blen), len, this.bufPos = bpos_blen, this.bufLen = 0, s);
-					if (pos_len > s) {
-						this.size = pos_len;
-					}
-					this.bufMod = true;
-					return n;
-				}
-				long npos = pos_len - this.bufferSize;
-				int n = writeRebuffer((int) (pos - npos), len, this.bufPos = npos, this.bufLen = 0, s);
-				if (pos_len > s) {
-					this.size = pos_len;
-				}
-				this.bufMod = true;
-				return n;
-			}
-			// start inside buffer
-			int n = writeRebuffer(0, len, this.bufPos = pos, this.bufLen = 0, s);
-			if (pos_len > s) {
-				this.size = pos_len;
-			}
-			this.bufMod = true;
-			return n;
-		}
-		this.bufMod = true;
-		return (int) (pos - bpos);
-	}
-
-	@Override
-	byte getByte(int index) {
-		return this.buffer[index];
-	}
-
-	@Override
-	char getChar(Endian endian, int index) {
-		return endian.getChar(this.buffer, index);
-	}
-
-	@Override
-	short getShort(Endian endian, int index) {
-		return endian.getShort(this.buffer, index);
-	}
-
-	@Override
-	int getInt(Endian endian, int index) {
-		return endian.getInt(this.buffer, index);
-	}
-
-	@Override
-	long getLong(Endian endian, int index) {
-		return endian.getLong(this.buffer, index);
-	}
-
-	@Override
-	float getFloat(Endian endian, int index) {
-		return endian.getFloat(this.buffer, index);
-	}
-
-	@Override
-	double getDouble(Endian endian, int index) {
-		return endian.getDouble(this.buffer, index);
-	}
-
-	@Override
-	void putByte(byte n, int index) {
-		this.buffer[index] = n;
-	}
-
-	@Override
-	void putChar(Endian endian, char n, int index) {
-		endian.putChar(this.buffer, index, n);
-	}
-
-	@Override
-	void putShort(Endian endian, short n, int index) {
-		endian.putShort(this.buffer, index, n);
-	}
-
-	@Override
-	void putInt(Endian endian, int n, int index) {
-		endian.putInt(this.buffer, index, n);
-	}
-
-	@Override
-	void putLong(Endian endian, long n, int index) {
-		endian.putLong(this.buffer, index, n);
-	}
-
-	@Override
-	void putFloat(Endian endian, float n, int index) {
-		endian.putFloat(this.buffer, index, n);
-	}
-
-	@Override
-	void putDouble(Endian endian, double n, int index) {
-		endian.putDouble(this.buffer, index, n);
-	}
-
-	private void _decode(Decoder dec, int off, int len, String replace) {
-		// decoder will resolve pending input on its own
-		// cannot have pending output because Appendable is boundless
-		dec.setInput(this.buffer, off, len);
-		while (true) {
-			int n = dec.decode(this.cb);
-			if (n == 0) {
-				// DONE.
-				break;
-			}
-			if (n < 0) {
-				// error. replace and continue
-				this.cb.append(replace);
-			}
-		}
-	}
-
-	// if pos not within current buffer range, rebuffer at pos
-	// return offset into buffer
-	private int seek(long pos, long s) throws IOException {
-		long bpos = this.bufPos;
-		int blen = this.bufLen;
-		long bpos_blen = bpos + blen;
-		if (pos < bpos || pos >= bpos_blen) {
-			flush(bpos, blen);
-			readRebuffer(pos, pos, s);
-			return 0;
-		}
-		return (int) (pos - bpos);
-	}
-
-	// sets up buffer for an arbitrary-length write at pos
-	// only flushes if pos outside buffer capacity
-	// else extends buffer by reading in existing bytes
-	// then padding any potential gap with 0s
-	// all this keeps flushing (the expensive part) at a minimum.
-	private int seekForWrite(long pos, long s) throws IOException {
-		long bpos = this.bufPos;
-		long bcap = bpos + this.bufferSize;
-		if (bcap < 0L) {
-			// unlikely, but necessary
-			bcap = Long.MAX_VALUE;
-		}
-		int blen = this.bufLen;
-		if (pos < bpos || pos >= bcap) {
-			// pos outside buffer capacity. start an empty buffer range.
-			flush(bpos, blen);
+			// op starts before buffer
+			_flush(bpos, blen);
+			// start a new empty buffer
 			this.bufPos = pos;
 			this.bufLen = 0;
 			return 0;
 		}
-		int off = (int) (pos - bpos);
-		if (off > blen) {
-			// there is a gap
-			// fill buffer
-			if (bpos < s) {
-				int k = (int) Math.min(s - bpos, this.bufferSize - blen);
-				blen += mustRead(bpos, this.buffer, blen, k);
+		// op starts inside or after buffer
+		long bpos_blen = bpos + blen;
+		if (pos >= bpos_blen) {
+			// op stops after buffer
+			long bcap = bpos + Math.min(s - bpos, this.bufferSize);
+			if (pos >= bcap) {
+				// op stops after buffer capacity
+				_flush(bpos, blen);
+				// start a new empty buffer
+				this.bufPos = pos;
+				this.bufLen = 0;
+				return 0;
 			}
-			// pad remaining gap (if any) with 0s
-			for (; blen < off; blen++) {
-				this.buffer[blen] = 0;
+			// op starts and stops inside buffer capacity
+			// fill and/or zero out existing buffer for pos
+			int off = (int) (pos - bpos);	// always at least >= blen
+			if (bpos_blen < s) {
+				// read in more bytes (if available)
+				int k = (int) Math.min(s - bpos_blen, this.bufferSize - blen);
+				blen += _mustRead(bpos_blen, this.buffer, blen, k);
 			}
-			this.bufLen = blen;	// only updated if no exceptions are thrown
+			// fill remaining gap, if any, with 0s
+			FastZeros.INSTANCE.fillWithZeros(this.buffer, blen, off - blen);
+			return off;
 		}
-		// if there is no gap between offset and length, the buffer remains as is. 
-		// seeing as any read bytes are likely to be overwritten shortly, it 
-		// would usually be a wasted effort.
-		return off;
+		// op starts and stops inside buffer
+		return (int) (pos - bpos);
 	}
 
 	@Override
-	String _nextLine(Decoder dec, String replace) throws IOException {
-		long p = this.pos;
-		long s = this.size;
-		if (p >= s) {
-			return null;
+	byte _readByte(long pos, long pos_len, long s) throws IOException {
+		return this.buffer[_readFixed(pos, pos_len, s)];
+	}
+	@Override
+	char _readChar(long pos, long pos_len, long s, Endian endian) throws IOException {
+		return endian.doGetChar(this.buffer, _readFixed(pos, pos_len, s));
+	}
+	@Override
+	short _readShort(long pos, long pos_len, long s, Endian endian) throws IOException {
+		return endian.doGetShort(this.buffer, _readFixed(pos, pos_len, s));
+	}
+	@Override
+	int _readInt(long pos, long pos_len, long s, Endian endian) throws IOException {
+		return endian.doGetInt(this.buffer, _readFixed(pos, pos_len, s));
+	}
+	@Override
+	float _readFloat(long pos, long pos_len, long s, Endian endian) throws IOException {
+		return endian.doGetFloat(this.buffer, _readFixed(pos, pos_len, s));
+	}
+	@Override
+	long _readLong(long pos, long pos_len, long s, Endian endian) throws IOException {
+		return endian.doGetLong(this.buffer, _readFixed(pos, pos_len, s));
+	}
+	@Override
+	double _readDouble(long pos, long pos_len, long s, Endian endian) throws IOException {
+		return endian.doGetDouble(this.buffer, _readFixed(pos, pos_len, s));
+	}
+	@Override
+	void _writeByte(byte n, long pos, long pos_len) throws IOException {
+		this.buffer[_writeFixed(pos, 1, pos_len)] = n;
+	}
+	@Override
+	void _writeChar(char n, long pos, long pos_len, Endian endian) throws IOException {
+		endian.doPutChar(n, this.buffer, _writeFixed(pos, 2, pos_len));
+	}
+	@Override
+	void _writeShort(short n, long pos, long pos_len, Endian endian) throws IOException {
+		endian.doPutShort(n, this.buffer, _writeFixed(pos, 2, pos_len));
+	}
+	@Override
+	void _writeInt(int n, long pos, long pos_len, Endian endian) throws IOException {
+		endian.doPutInt(n, this.buffer, _writeFixed(pos, 4, pos_len));
+	}
+	@Override
+	void _writeFloat(float n, long pos, long pos_len, Endian endian) throws IOException {
+		endian.doPutFloat(n, this.buffer, _writeFixed(pos, 4, pos_len));
+	}
+	@Override
+	void _writeLong(long n, long pos, long pos_len, Endian endian) throws IOException {
+		endian.doPutLong(n, this.buffer, _writeFixed(pos, 8, pos_len));
+	}
+	@Override
+	void _writeDouble(double n, long pos, long pos_len, Endian endian) throws IOException {
+		endian.doPutDouble(n, this.buffer, _writeFixed(pos, 8, pos_len));
+	}
+
+	@Override
+	int _decode(Decoder dec, Appendable dest, int maxChars, int maxCodePoints, long pos, long end, long s) throws IOException {
+		// resolve pending errors or output
+		int k = dec.doDecode(dest, maxChars, maxCodePoints);
+		if (k != 0) {
+			return k;
 		}
-		this.cb.delete(0, this.cb.length());
+		// no error or pending output produced
+		if (pos >= end) {
+			// cannot provide any input
+			return 0;
+		}
 		try {
-			while (true) {
-				int f = seek(p, s);
-				//int m = (int) Math.min(_s - this.bufPos, this.bufLen);	// seek already adjusts bufLen for size
-				int m = this.bufLen;
-				for (int i = f; i < m; i++) {
-					switch (this.buffer[i]) {
-						case '\r': {
-							_decode(dec, f, i++ - f, replace);
-							// skip over full separator
-							p += (i - f);
-							if (i < m && this.buffer[i] == '\n') {
-								p++;
-							}
-							return this.cb.toString();
-						}
-						case '\n': {
-							_decode(dec, f, i++ - f, replace);
-							p += (i - f);
-							return this.cb.toString();
-						}
-					}
-				}
-				int n = m - f;
-				_decode(dec, f, n, replace);
-				if ((p += n) == s) {
-					// full input range processed
-					if (dec.pendingInput() != 0) {
-						// incomplete code point at end of input sequence
-						this.cb.append('\uFFFD');
-					}
-					// return last line
-					return this.cb.toString();
-				}
-				// continue 
-			}
+			int f = _readSeek(pos, s);								// offset into buffer
+			int m = (int) Math.min(end - this.bufPos, this.bufLen);	// length of buffer for input range
+			dec.doSetInput(this.buffer, f, m - f);
+			long b = dec.bytesConsumed();
+			int x = dec.doDecode(dest, maxChars, maxCodePoints);
+			pos += (dec.bytesConsumed() - b);
+			return x;
 		} finally {
-			this.pos = p;
+			this.pos = pos;
 			dec.dropInput();
 		}
 	}
 
 	@Override
-	int _decode(Decoder dec, Appendable dest, int maxChars, int maxCodePoints, long pos, long end, long s) throws IOException {
+	int _decode(Decoder dec, Appendable dest, int maxChars, int maxCodePoints, long pos, long end, long s, IntPredicate stop) throws IOException {
+		// resolve pending errors or output
+		int k = dec.doDecode(dest, maxChars, maxCodePoints, stop);
+		if (k != 0) {
+			return k;
+		}
+		// no error or pending output produced
+		if (pos >= end) {
+			// cannot provide any input
+			return 0;
+		}
 		try {
-			// resolve pending errors or output
-			int k = dec.decode(dest, maxChars, maxCodePoints);
-			if (k != 0) {
-				return k;
-			}
-			// no error or pending output produced
-			if (pos >= end) {
-				// cannot provide any input
-				return 0;
-			}
-			int f = seek(pos, s);									// offset into buffer
+			int f = _readSeek(pos, s);								// offset into buffer
 			int m = (int) Math.min(end - this.bufPos, this.bufLen);	// length of buffer for input range
-			dec.setInput(this.buffer, f, m - f);
+			dec.doSetInput(this.buffer, f, m - f);
 			long b = dec.bytesConsumed();
-			int x = dec.decode(dest, maxChars, maxCodePoints);
+			int x = dec.doDecode(dest, maxChars, maxCodePoints, stop);
+			pos += (dec.bytesConsumed() - b);
+			return x;
+		} finally {
+			this.pos = pos;
+			dec.dropInput();
+		}
+	}
+
+	@Override
+	int _decode(Decoder dec, char[] dest, int off, int maxChars, int maxCodePoints, long pos, long end, long s) throws IOException {
+		// resolve pending errors or output
+		int k = dec.doDecode(dest, off, maxChars, maxCodePoints);
+		if (k != 0) {
+			return k;
+		}
+		// no error or pending output produced
+		if (pos >= end) {
+			// cannot provide any input
+			return 0;
+		}
+		try {
+			int f = _readSeek(pos, s);								// offset into buffer
+			int m = (int) Math.min(end - this.bufPos, this.bufLen);	// length of buffer for input range
+			dec.doSetInput(this.buffer, f, m - f);
+			long b = dec.bytesConsumed();
+			int x = dec.doDecode(dest, off, maxChars, maxCodePoints);
+			pos += (dec.bytesConsumed() - b);
+			return x;
+		} finally {
+			this.pos = pos;
+			dec.dropInput();
+		}
+	}
+
+	@Override
+	int _decode(Decoder dec, char[] dest, int off, int maxChars, int maxCodePoints, long pos, long end, long s, IntPredicate stop) throws IOException {
+		// resolve pending errors or output
+		int k = dec.doDecode(dest, off, maxChars, maxCodePoints, stop);
+		if (k != 0) {
+			return k;
+		}
+		// no error or pending output produced
+		if (pos >= end) {
+			// cannot provide any input
+			return 0;
+		}
+		try {
+			int f = _readSeek(pos, s);								// offset into buffer
+			int m = (int) Math.min(end - this.bufPos, this.bufLen);	// length of buffer for input range
+			dec.doSetInput(this.buffer, f, m - f);
+			long b = dec.bytesConsumed();
+			int x = dec.doDecode(dest, off, maxChars, maxCodePoints, stop);
 			pos += (dec.bytesConsumed() - b);
 			return x;
 		} finally {
@@ -759,9 +824,9 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 	@Override
 	int _encode(Encoder enc, int inputChars, long pos, long end, int maxCodePoints) throws IOException {
 		long s = this.size;
-		int f = seekForWrite(pos, s);
+		int f = _writeSeek(pos, s);	// prep array for an arbitrary-length write
 		int m = (int) Math.min(end - this.bufPos, this.bufferSize);
-		int x = enc.encode(inputChars, this.buffer, f, m - f, maxCodePoints);
+		int x = enc.doEncode(inputChars, this.buffer, f, m - f, maxCodePoints);
 		if (x > 0) {
 			long posx = pos + x;
 			int fx = f + x;
@@ -777,9 +842,83 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		return x;
 	}
 
+	// I/O throughput of ~100 MB/s. that's pretty fast, actually. 
+	@Override
+	String _nextLine(Decoder dec, String replace) throws IOException {
+		long p = this.pos;
+		long s = this.size;
+		if (p >= s) {
+			return null;
+		}
+		this.sb.setLength(0);
+		try {
+			while (true) {
+				int f = _readSeek(p, s);
+				int m = (int) Math.min(this.bufLen, s - p);	// >TODO is that right?
+				for (int i = f; i < m; i++) {
+					switch (this.buffer[i]) {
+						case '\r': {
+							_decodeNextLine(dec, f, i++ - f, replace);
+							// skip over full separator
+							p += (i - f);
+							if (p != s) {
+								// more bytes are available
+								if (i == m) {
+									// end of buffer reached, but need to see next byte
+									i = _readSeek(p, s);
+								}
+								if (this.buffer[i] == '\n') {
+									p++;
+								}
+							} // else: file ends with an '\r'
+							return this.sb.toString();
+						}
+						case '\n': {
+							_decodeNextLine(dec, f, i++ - f, replace);
+							p += (i - f);
+							return this.sb.toString();
+						}
+					}
+				}
+				// buffer range contains no separators
+				int n = m - f;
+				_decodeNextLine(dec, f, n, replace);
+				if ((p += n) == s) {
+					// full input range processed
+					if (dec.pendingInput() != 0) {
+						// incomplete code point at end of input sequence
+						this.sb.append('\uFFFD');
+					}
+					// return last line
+					return this.sb.toString();
+				}
+				// continue 
+			}
+		} finally {
+			this.pos = p;
+			dec.dropInput();
+		}
+	}
+
+	private void _decodeNextLine(Decoder dec, int off, int len, String replace) throws IOException {
+		// decoder will resolve pending input on its own
+		// cannot have pending output because Appendable is boundless
+		dec.doSetInput(this.buffer, off, len);
+		while (true) {
+			int n = dec.doDecode(this.sb);
+			if (n == 0) {
+				// DONE.
+				break;
+			}
+			if (n < 0) {
+				// error. replace and continue
+				this.sb.append(replace);
+			}
+		}
+	}
+
 	@Override
 	int _inflate(byte[] dest, int off, int len, Inflater inf, long pos, long end, long s) throws IOException, DataFormatException {
-		checkSharedArray(dest);
 		if (len == 0) {
 			return 0;	// no bytes to be produced
 		}
@@ -793,7 +932,7 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 							return x;	// out of input.
 						}
 						// feed inflater
-						int f = seek(pos, s);
+						int f = _readSeek(pos, s);
 						int b = ((int) Math.min(end - this.bufPos, this.bufLen)) - f;
 						inf.setInput(this.buffer, f, b);
 						pos += b;
@@ -815,14 +954,18 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		}
 	}
 
-	private static final String ASYNC_MSG = "Inflater was closed asynchronously. Cannot determine number of bytes written. Destination buffer is compromised.";
-
+	// with default compression level and a large enough buffer size (64 kb), 
+	// this achieves around 40 MB/s file-to-file through-put. Which is not... terrible.
+	// it's half the speed of 7Zip. it's useable. and certainly faster than any other
+	// way Java could offer out of the box.
 	@Override
-	@SuppressWarnings("UseSpecificCatch")
 	long _inflate(IOBuffer dest, long numBytesOut, Inflater inf, long pos, long end, long s) throws IOException, DataFormatException {
 		if (dest.getClass() == GeneralIOBuffer.class) {
 			// We have direct access to the other buffer, 
 			// no additional allocation or copying is required.
+			// Instead we directly inflate to its array from our array.
+			// this is basically just inflateTo, except it reads in more input from
+			// this buffer. plus, it's long-based.
 			GeneralIOBuffer out = (GeneralIOBuffer) dest;
 			long out_pos = out.pos;
 			long len = Math.min(numBytesOut, Long.MAX_VALUE - out_pos);
@@ -836,7 +979,7 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 				long totalNew = totalOld;
 				long x = 0L;
 				do {
-					int out_off = out.seekForWrite(out_pos, out_s);
+					int out_off = out._writeSeek(out_pos, out_s);
 					int m = (int) Math.min(len - x, out.bufferSize - out_off);
 					int n = 0;
 					try {
@@ -848,7 +991,7 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 										// out of input
 										return x + n;
 									}
-									int f = seek(pos, s);
+									int f = _readSeek(pos, s);
 									int b = ((int) Math.min(end - this.bufPos, this.bufLen)) - f;
 									inf.setInput(this.buffer, f, b);
 									pos += b;
@@ -861,42 +1004,15 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 							n += y;
 						} while (n != m);
 					} catch (java.util.zip.DataFormatException ex) {
-						try {
-							// Determine how many bytes were actually written.
-							// Cannot simply zero out buffer length, because 
-							// that could delete previously committed-to writes.
-							// Unless(!) the buffer is flushed at start of the 
-							// method. If so, it could be discarded safely.
-							// Really inefficient, though. 
-							// However, current impl is safe unless the 
-							// inflater is closed asynchronously, which is 
-							// extremely unlikey in an application not written 
-							// by Shakespearean Monkeys. 
-							// In other words, this is fine.
-							n = (int) (inf.getBytesWritten() - totalOld);
-							// re-throw specific checked exception
-							throw new DataFormatException(ex);
-						} catch (NullPointerException nex) {
-							// incorrect usage actually more critical than 
-							// malformed input, no? input will still be bad 
-							// when used correctly.
-							// this will probably never happen, anyway.
-							throw new ConcurrentModificationException(ASYNC_MSG, ex);
-						}
-					} catch (Error ex) {
-						try {
-							n = (int) (inf.getBytesWritten() - totalOld);
-							throw ex;	// re-throw as is
-						} catch (NullPointerException nex) {
-							throw ex;	// errors take priority as is
-						}
+						n = (int) (inf.getBytesWritten() - totalOld);
+						throw new DataFormatException(ex);
+					} catch (IOException ex) {
+						n = (int) (inf.getBytesWritten() - totalOld);
+						throw ex;
 					} catch (Throwable ex) {
-						try {
-							n = (int) (inf.getBytesWritten() - totalOld);
-							throw ex;	// re-throw as is
-						} catch (NullPointerException nex) {
-							throw new ConcurrentModificationException(ASYNC_MSG, ex);
-						}
+						// something else went wrong
+						n = (int) (inf.getBytesWritten() - totalOld);
+						throw ex;
 					} finally {
 						if (n != 0) {
 							out.bufMod = true;
@@ -918,24 +1034,24 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 			} finally {
 				out.pos = out_pos;
 				out.size = out_s;
-				try {
-					this.pos = pos - inf.getRemaining();	// adjust for discarded input
-				} finally {
-					inf.setInput(EMPTY);					// discard remaining input
-				}
+				this.pos = pos - inf.getRemaining();	// adjust for discarded input
+				inf.setInput(EMPTY);					// discard remaining input
 			}
 		}
 		// general solution, requires an extra array to inflate to, which is 
 		// then written to the destination buffer.
 		// at least the input array can be used directly, so it's still superior
-		// to any other generic solution.
+		// to a generic solution.
 		long len = Math.min(numBytesOut, Long.MAX_VALUE - dest.pos());
 		if (len == 0L) {
 			// cannot produce output
 			return 0L;
 		}
-		// request buffer of default size
-		byte[] buf = BufferCache.requestBuffer();
+		// TODO if buffer size at least 64k, then zlib will become much faster
+		// by primarily using the "inflate_fast" sub-routine.
+		// make sure to do that for all buffers likely to require inflation.
+		// request a temp buffer.
+		byte[] buf = BufferCache.requestBuffer(1 << 16);
 		try {
 			long totalOld = inf.getBytesWritten();
 			long totalNew = totalOld;
@@ -952,7 +1068,7 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 									// out of input
 									return x + n;
 								}
-								int f = seek(pos, s);
+								int f = _readSeek(pos, s);
 								int b = ((int) Math.min(end - this.bufPos, this.bufLen)) - f;
 								inf.setInput(this.buffer, f, b);
 								pos += b;
@@ -965,32 +1081,20 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 						n += y;
 					} while (n != m);
 				} catch (java.util.zip.DataFormatException ex) {
-					try {
-						n = (int) (inf.getBytesWritten() - totalOld);
-						throw new DataFormatException(ex);
-					} catch (NullPointerException nex) {
-						throw new ConcurrentModificationException(ASYNC_MSG, ex);
-					}
-				} catch (Error ex) {
-					try {
-						n = (int) (inf.getBytesWritten() - totalOld);
-						throw ex;	// re-throw as is
-					} catch (NullPointerException nex) {
-						throw ex;	// errors take priority as is
-					}
+					n = (int) (inf.getBytesWritten() - totalOld);
+					throw new DataFormatException(ex);
+				} catch (IOException ex) {
+					n = (int) (inf.getBytesWritten() - totalOld);
+					throw ex;
 				} catch (Throwable ex) {
-					try {
-						n = (int) (inf.getBytesWritten() - totalOld);
-						throw ex;	// re-throw as is
-					} catch (NullPointerException nex) {
-						throw new ConcurrentModificationException(ASYNC_MSG, ex);
-					}
+					n = (int) (inf.getBytesWritten() - totalOld);
+					throw ex;
 				} finally {
 					// must write even when errors occur, 
 					// in order for bytes consumed and procuded
-					// to stay synced. And because both impls must behave the 
+					// to stay synced. And because both impls should behave the 
 					// same way.
-					dest.write(buf, 0, n);
+					dest.doWrite(buf, 0, n);
 				}
 				totalOld = totalNew;
 				totalNew += m;
@@ -1001,26 +1105,81 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 			try {
 				BufferCache.releaseBuffer(buf);
 			} finally {
-				try {
-					this.pos = pos - inf.getRemaining();	// adjust for discarded input
-				} finally {
-					inf.setInput(EMPTY);					// discard remaining input
-				}
+				this.pos = pos - inf.getRemaining();	// adjust for discarded input
+				inf.setInput(EMPTY);					// discard remaining input
 			}
+		}
+	}
+
+	@Override
+	int _inflateTo(Inflater inf, int len, long pos) throws IOException {
+		if (len == 0) {
+			return 0;
+		}
+		long s = this.size;
+		try {
+			long totalOld = inf.getBytesWritten();
+			long totalNew = totalOld;
+			int x = 0;
+			do {
+				int f = _writeSeek(pos, s);
+				int m = Math.min(len - x, this.bufferSize - f);
+				int n = 0;
+				try {
+					do {
+						int y;
+						while ((y = inf.inflate(this.buffer, f + n, m - n)) == 0) {
+							if (inf.needsInput() || inf.finished() || inf.needsDictionary()) {
+								return x + n;
+							}
+						}
+						n += y;
+					} while (n != m);
+				} catch (java.util.zip.DataFormatException ex) {
+					// get number of bytes written from inflater itself
+					// so that inflater and buffer statistics stay synced.
+					n = (int) (inf.getBytesWritten() - totalOld);
+					throw new DataFormatException(ex);
+				} catch (Throwable ex) {
+					n = (int) (inf.getBytesWritten() - totalOld);
+					throw ex;
+				} finally {
+					if (n != 0) {
+						// update buffer state in all cases.
+						this.bufMod = true;
+						f += n;
+						if (f > this.bufLen) {
+							this.bufLen = f;
+						}
+						pos += n;
+						if (pos > s) {
+							s = pos;
+						}
+					}
+				}
+				totalOld = totalNew;
+				totalNew += n;
+				x += n;
+			} while (x != len);
+			return len;
+		} finally {
+			this.pos = pos;
+			this.size = s;
 		}
 	}
 
 	// If a only a small numbers of bytes are tranferred at a time, the 
 	// overhead of I/O calls becomes a performance concern. 
 	// Instead, use buffering to speed up repeated small transfers.
-	// TODO needs testing to find optimal value.
+	// TODO needs testing to find a good value.
 	private static final long FC_TRANSFER_THRESHOLD = 64L;
 
+	// TODO go over this again, please.
 	@Override
 	long _transfer(long numBytes, IOBuffer dest, long pos, long s) throws IOException {
 		if (dest.getClass() == GeneralIOBuffer.class) {
 			GeneralIOBuffer out = (GeneralIOBuffer) dest;
-			out.ensureOpen();
+			out._ensureOpen();	// no better place to put this line without seriously repeating myself
 			long out_pos = out.pos;
 			long n = Math.min(numBytes, Long.MAX_VALUE - out_pos);
 			if (n == 0L) {
@@ -1030,13 +1189,15 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 			if (n > FC_TRANSFER_THRESHOLD
 					&& this.source.getClass() == FileIOAddress.FileIOSource.class
 					&& out.source.getClass() == FileIOAddress.FileIOSource.class) {
+				// can make use of FileChannel's native transfer method
 				if (this.bufMod) {
 					long bpos = this.bufPos;
 					int blen = this.bufLen;
 					if (pos < bpos + blen && end > bpos) {
 						// tranfer range in buffer range. 
 						// ensure modified bytes are transferred.
-						doFlush(bpos, blen);
+						_forceFlush(bpos, blen);
+						// keep buffer intact
 					}
 				}
 				if (out.bufMod) {
@@ -1045,8 +1206,9 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 					if (pos < out_bpos + out_blen && end > out_bpos) {
 						// tranfer range in buffer range. 
 						// ensure no modified bytes are swallowed.
-						doFlush(out_bpos, out_blen);
-						out.bufLen = 0;	// dispose of buffer
+						out._forceFlush(out_bpos, out_blen);
+						// dispose of buffer, because parts are overwritten
+						out.bufLen = 0;
 					}
 				}
 				long k = 0L;
@@ -1069,9 +1231,10 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 					}
 				}
 			}
+			// cannot use native transfer
 			try {
 				do {
-					int f = seek(pos, s);
+					int f = _readSeek(pos, s);
 					int b = ((int) Math.min(end - this.bufPos, this.bufLen)) - f;
 					long out_pos_len = out_pos + b;
 					out._write(out_pos, out_pos_len, this.buffer, f, b);
@@ -1092,7 +1255,7 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		try {
 			long end = pos + n;
 			do {
-				int f = seek(pos, s);
+				int f = _readSeek(pos, s);
 				int b = ((int) Math.min(end - this.bufPos, this.bufLen)) - f;
 				dest.write(this.buffer, f, b);
 				pos += b;
@@ -1101,23 +1264,5 @@ final class GeneralIOBuffer extends AbstractIOBuffer {
 		} finally {
 			this.pos = pos;
 		}
-	}
-
-	@Override
-	public IOBuffer createSibling() throws IOException {
-		ensureOpen();	// for flush
-		flush();		// sync sibling with this buffer
-		return new GeneralIOBuffer(this.source, this.shared, this.bufferSize);
-	}
-
-	@Override
-	void _updateChecksum(long pos, Checksum sum, long end, long s) {
-		// pos != end
-		do {
-			int f = seek(pos, s);
-			int b = ((int) Math.min(end - this.bufPos, this.bufLen)) - f;
-			sum.update(this.buffer, f, b);
-			pos += b;
-		} while (pos != end);
 	}
 }

@@ -8,7 +8,7 @@ package org.bitsandpieces.util.io;
 /**
  * Signals that a data format error has occurred.
  *
- * @author pp
+ * @author Jan Kebernik
  */
 public class DataFormatException extends RuntimeException {
 

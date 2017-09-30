@@ -6,15 +6,12 @@
 package org.bitsandpieces.util;
 
 /**
- * An Endian represents a Big-Endian or Little-Endian byte order. An Endian
- * provides an efficient and hassle-free way to convert between bytes and
- * multi-byte primitives, without having to rely on the expensive and cumbersome
- * java.nio.ByteBuffer solution. Under normal circumstances, using an Endian for
- * byte conversion is expected to be much more efficient than conversion by
- * hand.
- *
- * @implNote If available, this implementation will make use of sun.misc.Unsafe
- * so severely speed up through-put.
+ * An Endian represents a {@link #BIG Big-Endian} or
+ * {@link #LITTLE Little-Endian} byte order. Endians provide an efficient and
+ * hassle-free way to convert between bytes and multi-byte primitives, without
+ * having to rely of the cumbersome and over-designed java.nio.ByteBuffer
+ * solution. Under normal circumstances, using an Endian for byte conversion is
+ * expected to be much more efficient than any type of manual conversion.
  *
  * @author Jan Kebernik
  */
@@ -28,52 +25,52 @@ public enum Endian {
 	 */
 	LITTLE {
 		@Override
-		char _getChar(byte[] b, int off) {
-			return BYTES.getCharLE(b, off);
+		public char doGetChar(byte[] b, int off) {
+			return INSTANCE.getCharLE(b, off);
 		}
 		@Override
-		short _getShort(byte[] b, int off) {
-			return BYTES.getShortLE(b, off);
+		public short doGetShort(byte[] b, int off) {
+			return INSTANCE.getShortLE(b, off);
 		}
 		@Override
-		int _getInt(byte[] b, int off) {
-			return BYTES.getIntLE(b, off);
+		public int doGetInt(byte[] b, int off) {
+			return INSTANCE.getIntLE(b, off);
 		}
 		@Override
-		float _getFloat(byte[] b, int off) {
-			return BYTES.getFloatLE(b, off);
+		public float doGetFloat(byte[] b, int off) {
+			return INSTANCE.getFloatLE(b, off);
 		}
 		@Override
-		long _getLong(byte[] b, int off) {
-			return BYTES.getLongLE(b, off);
+		public long doGetLong(byte[] b, int off) {
+			return INSTANCE.getLongLE(b, off);
 		}
 		@Override
-		double _getDouble(byte[] b, int off) {
-			return BYTES.getDoubleLE(b, off);
+		public double doGetDouble(byte[] b, int off) {
+			return INSTANCE.getDoubleLE(b, off);
 		}
 		@Override
-		void _putChar(byte[] b, int off, char n) {
-			BYTES.putCharLE(b, off, n);
+		public void doPutChar(char n, byte[] b, int off) {
+			INSTANCE.putCharLE(n, b, off);
 		}
 		@Override
-		void _putShort(byte[] b, int off, short n) {
-			BYTES.putShortLE(b, off, n);
+		public void doPutShort(short n, byte[] b, int off) {
+			INSTANCE.putShortLE(n, b, off);
 		}
 		@Override
-		void _putInt(byte[] b, int off, int n) {
-			BYTES.putIntLE(b, off, n);
+		public void doPutInt(int n, byte[] b, int off) {
+			INSTANCE.putIntLE(n, b, off);
 		}
 		@Override
-		void _putFloat(byte[] b, int off, float n) {
-			BYTES.putFloatLE(b, off, n);
+		public void doPutFloat(float n, byte[] b, int off) {
+			INSTANCE.putFloatLE(n, b, off);
 		}
 		@Override
-		void _putLong(byte[] b, int off, long n) {
-			BYTES.putLongLE(b, off, n);
+		public void doPutLong(long n, byte[] b, int off) {
+			INSTANCE.putLongLE(n, b, off);
 		}
 		@Override
-		void _putDouble(byte[] b, int off, double n) {
-			BYTES.putDoubleLE(b, off, n);
+		public void doPutDouble(double n, byte[] b, int off) {
+			INSTANCE.putDoubleLE(n, b, off);
 		}
 		@Override
 		public char toChar(byte b1, byte b0) {
@@ -113,52 +110,52 @@ public enum Endian {
 	 */
 	BIG {
 		@Override
-		char _getChar(byte[] b, int off) {
-			return BYTES.getCharBE(b, off);
+		public char doGetChar(byte[] b, int off) {
+			return INSTANCE.getCharBE(b, off);
 		}
 		@Override
-		short _getShort(byte[] b, int off) {
-			return BYTES.getShortBE(b, off);
+		public short doGetShort(byte[] b, int off) {
+			return INSTANCE.getShortBE(b, off);
 		}
 		@Override
-		int _getInt(byte[] b, int off) {
-			return BYTES.getIntBE(b, off);
+		public int doGetInt(byte[] b, int off) {
+			return INSTANCE.getIntBE(b, off);
 		}
 		@Override
-		float _getFloat(byte[] b, int off) {
-			return BYTES.getFloatBE(b, off);
+		public float doGetFloat(byte[] b, int off) {
+			return INSTANCE.getFloatBE(b, off);
 		}
 		@Override
-		long _getLong(byte[] b, int off) {
-			return BYTES.getLongBE(b, off);
+		public long doGetLong(byte[] b, int off) {
+			return INSTANCE.getLongBE(b, off);
 		}
 		@Override
-		double _getDouble(byte[] b, int off) {
-			return BYTES.getDoubleBE(b, off);
+		public double doGetDouble(byte[] b, int off) {
+			return INSTANCE.getDoubleBE(b, off);
 		}
 		@Override
-		void _putChar(byte[] b, int off, char n) {
-			BYTES.putCharBE(b, off, n);
+		public void doPutChar(char n, byte[] b, int off) {
+			INSTANCE.putCharBE(n, b, off);
 		}
 		@Override
-		void _putShort(byte[] b, int off, short n) {
-			BYTES.putShortBE(b, off, n);
+		public void doPutShort(short n, byte[] b, int off) {
+			INSTANCE.putShortBE(n, b, off);
 		}
 		@Override
-		void _putInt(byte[] b, int off, int n) {
-			BYTES.putIntBE(b, off, n);
+		public void doPutInt(int n, byte[] b, int off) {
+			INSTANCE.putIntBE(n, b, off);
 		}
 		@Override
-		void _putFloat(byte[] b, int off, float n) {
-			BYTES.putFloatBE(b, off, n);
+		public void doPutFloat(float n, byte[] b, int off) {
+			INSTANCE.putFloatBE(n, b, off);
 		}
 		@Override
-		void _putLong(byte[] b, int off, long n) {
-			BYTES.putLongBE(b, off, n);
+		public void doPutLong(long n, byte[] b, int off) {
+			INSTANCE.putLongBE(n, b, off);
 		}
 		@Override
-		void _putDouble(byte[] b, int off, double n) {
-			BYTES.putDoubleBE(b, off, n);
+		public void doPutDouble(double n, byte[] b, int off) {
+			INSTANCE.putDoubleBE(n, b, off);
 		}
 		@Override
 		public char toChar(byte b1, byte b0) {
@@ -191,7 +188,7 @@ public enum Endian {
 		}
 	};
 
-	private static final UnsafeBytes BYTES = UnsafeBytes.INSTANCE;
+	private static final FastBytes INSTANCE = FastBytes.INSTANCE;
 
 	/**
 	 * Writes the specified {@code char} to the specified byte-array, starting
@@ -206,11 +203,11 @@ public enum Endian {
 	 * writing at the specified offset. No {@code byte}s are written in such
 	 * cases.
 	 */
-	public Endian putChar(byte[] buf, int off, char n) {
+	public Endian putChar(char n, byte[] buf, int off) {
 		if (off < 0 || off > buf.length - 2) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		_putChar(buf, off, n);
+		doPutChar(n, buf, off);
 		return this;
 	}
 
@@ -227,11 +224,11 @@ public enum Endian {
 	 * writing at the specified offset. No {@code byte}s are written in such
 	 * cases.
 	 */
-	public Endian putShort(byte[] buf, int off, short n) {
+	public Endian putShort(short n, byte[] buf, int off) {
 		if (off < 0 || off > buf.length - 2) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		_putShort(buf, off, n);
+		doPutShort(n, buf, off);
 		return this;
 	}
 
@@ -248,11 +245,11 @@ public enum Endian {
 	 * writing at the specified offset. No {@code byte}s are written in such
 	 * cases.
 	 */
-	public Endian putInt(byte[] buf, int off, int n) {
+	public Endian putInt(int n, byte[] buf, int off) {
 		if (off < 0 || off > buf.length - 4) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		_putInt(buf, off, n);
+		doPutInt(n, buf, off);
 		return this;
 	}
 
@@ -269,11 +266,11 @@ public enum Endian {
 	 * writing at the specified offset. No {@code byte}s are written in such
 	 * cases.
 	 */
-	public Endian putFloat(byte[] buf, int off, float n) {
+	public Endian putFloat(float n, byte[] buf, int off) {
 		if (off < 0 || off > buf.length - 4) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		_putFloat(buf, off, n);
+		doPutFloat(n, buf, off);
 		return this;
 	}
 
@@ -290,11 +287,11 @@ public enum Endian {
 	 * writing at the specified offset. No {@code byte}s are written in such
 	 * cases.
 	 */
-	public Endian putLong(byte[] buf, int off, long n) {
+	public Endian putLong(long n, byte[] buf, int off) {
 		if (off < 0 || off > buf.length - 8) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		_putLong(buf, off, n);
+		doPutLong(n, buf, off);
 		return this;
 	}
 
@@ -311,11 +308,11 @@ public enum Endian {
 	 * writing at the specified offset. No {@code byte}s are written in such
 	 * cases.
 	 */
-	public Endian putDouble(byte[] buf, int off, double n) {
+	public Endian putDouble(double n, byte[] buf, int off) {
 		if (off < 0 || off > buf.length - 8) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		_putDouble(buf, off, n);
+		doPutDouble(n, buf, off);
 		return this;
 	}
 
@@ -335,7 +332,7 @@ public enum Endian {
 		if (off < 0 || off > buf.length - 2) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		return _getChar(buf, off);
+		return doGetChar(buf, off);
 	}
 
 	/**
@@ -354,7 +351,7 @@ public enum Endian {
 		if (off < 0 || off > buf.length - 2) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		return _getShort(buf, off);
+		return doGetShort(buf, off);
 	}
 
 	/**
@@ -373,7 +370,7 @@ public enum Endian {
 		if (off < 0 || off > buf.length - 4) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		return _getInt(buf, off);
+		return doGetInt(buf, off);
 	}
 
 	/**
@@ -392,7 +389,7 @@ public enum Endian {
 		if (off < 0 || off > buf.length - 4) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		return _getFloat(buf, off);
+		return doGetFloat(buf, off);
 	}
 
 	/**
@@ -411,7 +408,7 @@ public enum Endian {
 		if (off < 0 || off > buf.length - 8) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		return _getLong(buf, off);
+		return doGetLong(buf, off);
 	}
 
 	/**
@@ -430,7 +427,7 @@ public enum Endian {
 		if (off < 0 || off > buf.length - 8) {
 			throw new ArrayIndexOutOfBoundsException(off);
 		}
-		return _getDouble(buf, off);
+		return doGetDouble(buf, off);
 	}
 
 	/**
@@ -520,17 +517,18 @@ public enum Endian {
 	 */
 	public abstract Endian other();
 
-	// no bounds-checks variants accessible from within this package
-	abstract void _putChar(byte[] buf, int off, char n);
-	abstract void _putShort(byte[] buf, int off, short n);
-	abstract void _putInt(byte[] buf, int off, int n);
-	abstract void _putFloat(byte[] buf, int off, float n);
-	abstract void _putLong(byte[] buf, int off, long n);
-	abstract void _putDouble(byte[] buf, int off, double n);
-	abstract char _getChar(byte[] buf, int off);
-	abstract short _getShort(byte[] buf, int off);
-	abstract int _getInt(byte[] buf, int off);
-	abstract float _getFloat(byte[] buf, int off);
-	abstract long _getLong(byte[] buf, int off);
-	abstract double _getDouble(byte[] buf, int off);
+	// no bounds-checks variants
+	// real risk of out-of-bounds access. use caution!
+	public abstract void doPutChar(char n, byte[] buf, int off);
+	public abstract void doPutShort(short n, byte[] buf, int off);
+	public abstract void doPutInt(int n, byte[] buf, int off);
+	public abstract void doPutFloat(float n, byte[] buf, int off);
+	public abstract void doPutLong(long n, byte[] buf, int off);
+	public abstract void doPutDouble(double n, byte[] buf, int off);
+	public abstract char doGetChar(byte[] buf, int off);
+	public abstract short doGetShort(byte[] buf, int off);
+	public abstract int doGetInt(byte[] buf, int off);
+	public abstract float doGetFloat(byte[] buf, int off);
+	public abstract long doGetLong(byte[] buf, int off);
+	public abstract double doGetDouble(byte[] buf, int off);
 }

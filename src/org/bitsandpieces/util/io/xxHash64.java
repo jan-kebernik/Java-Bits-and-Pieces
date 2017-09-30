@@ -23,9 +23,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-package org.bitsandpieces.util;
+package org.bitsandpieces.util.io;
 
 import java.util.zip.Checksum;
+import org.bitsandpieces.util.Endian;
 
 /**
  * Pure Java 64-bit implementation of Yann Collet's amazing
@@ -34,9 +35,6 @@ import java.util.zip.Checksum;
  * <a href="http://create.stephan-brumme.com/xxhash/">simplified</a> version.
  * <p>
  * Obligatory warning: This is not a cryptographically secure hash.
- *
- * IMPORTANT: This implementation has not been tested against the reference
- * implementations as of yet. Results may vary!
  *
  * @implNote On an Intel Core i5 CPU @ 3.30 GHz using DDR3 RAM, this
  * implementation has a through-put of around 7,5 GB/s, which is not nearly as
@@ -51,6 +49,7 @@ import java.util.zip.Checksum;
  *
  * @author Jan Kebernik
  */
+// TODO needs testing against ref impl
 public class xxHash64 implements Checksum {
 
 	// two's-complement arithmetic is sign-agnostic
@@ -105,10 +104,10 @@ public class xxHash64 implements Checksum {
 		this.bufferSize = (bs + 1) & MAX_BUFFER_IDX;	// and update its size (0..31)
 		if (bs == MAX_BUFFER_IDX) {
 			// process 32 (4x8) bytes in parallel
-			this.state0 = processSingle(this.state0, ENDIAN._getLong(this.buffer, 0));
-			this.state1 = processSingle(this.state1, ENDIAN._getLong(this.buffer, 8));
-			this.state2 = processSingle(this.state2, ENDIAN._getLong(this.buffer, 16));
-			this.state3 = processSingle(this.state3, ENDIAN._getLong(this.buffer, 24));
+			this.state0 = processSingle(this.state0, ENDIAN.doGetLong(this.buffer, 0));
+			this.state1 = processSingle(this.state1, ENDIAN.doGetLong(this.buffer, 8));
+			this.state2 = processSingle(this.state2, ENDIAN.doGetLong(this.buffer, 16));
+			this.state3 = processSingle(this.state3, ENDIAN.doGetLong(this.buffer, 24));
 		}
 	}
 
@@ -138,17 +137,17 @@ public class xxHash64 implements Checksum {
 				off += n;
 			}
 			// process 32 (4x8) bytes in parallel, from buffer
-			s0 = processSingle(s0, ENDIAN._getLong(this.buffer, 0));
-			s1 = processSingle(s1, ENDIAN._getLong(this.buffer, 8));
-			s2 = processSingle(s2, ENDIAN._getLong(this.buffer, 16));
-			s3 = processSingle(s3, ENDIAN._getLong(this.buffer, 24));
+			s0 = processSingle(s0, ENDIAN.doGetLong(this.buffer, 0));
+			s1 = processSingle(s1, ENDIAN.doGetLong(this.buffer, 8));
+			s2 = processSingle(s2, ENDIAN.doGetLong(this.buffer, 16));
+			s3 = processSingle(s3, ENDIAN.doGetLong(this.buffer, 24));
 		}
 		// process 32 (4x8) bytes in parallel, from source
 		for (int m = max - MAX_BUFFER_IDX; off < m; off += MAX_BUFFER_SIZE) {
-			s0 = processSingle(s0, ENDIAN._getLong(buf, off));
-			s1 = processSingle(s1, ENDIAN._getLong(buf, off + 8));
-			s2 = processSingle(s2, ENDIAN._getLong(buf, off + 16));
-			s3 = processSingle(s3, ENDIAN._getLong(buf, off + 24));
+			s0 = processSingle(s0, ENDIAN.doGetLong(buf, off));
+			s1 = processSingle(s1, ENDIAN.doGetLong(buf, off + 8));
+			s2 = processSingle(s2, ENDIAN.doGetLong(buf, off + 16));
+			s3 = processSingle(s3, ENDIAN.doGetLong(buf, off + 24));
 		}
 		this.state0 = s0;
 		this.state1 = s1;
@@ -183,11 +182,11 @@ public class xxHash64 implements Checksum {
 		int r = bs & 7;	// remaining 0..7 bytes
 		int i = 0;
 		for (int m = bs - r; i < m; i += 8) {
-			result = Long.rotateLeft(result ^ processSingle(0, ENDIAN._getLong(this.buffer, i)), 27) * PRIME1 + PRIME4;
+			result = Long.rotateLeft(result ^ processSingle(0, ENDIAN.doGetLong(this.buffer, i)), 27) * PRIME1 + PRIME4;
 		}
 		// do remainder
 		if (r >= 4) {
-			result = Long.rotateLeft(result ^ (ENDIAN._getInt(this.buffer, i) & 0xffffffffL) * PRIME1, 23) * PRIME2 + PRIME3;
+			result = Long.rotateLeft(result ^ (ENDIAN.doGetInt(this.buffer, i) & 0xffffffffL) * PRIME1, 23) * PRIME2 + PRIME3;
 			i += 4;
 		}
 		for (; i < bs; i++) {

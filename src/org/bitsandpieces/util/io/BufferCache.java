@@ -16,7 +16,14 @@ package org.bitsandpieces.util.io;
  */
 final class BufferCache {
 
-	private static final int DEFAULT_INDEX = 20;	// 4096 bytes
+	// 64 kb, fairly large and rebuffering is expensive, but 
+	// it also means that inflaters become faster because they can make use
+	// of the "inflate_fast" sub-routine
+	// and it means that small files will fit into a single buffer, 
+	// which can speed things up a lot.
+	// plus allocation costs amortize quickly without too much nesting/concurrency
+	// so it's still cheap.
+	private static final int DEFAULT_INDEX = 16;
 	static final int DEFAULT_SIZE = 1 << DEFAULT_INDEX;
 	private static final int MAX_LENGTH = Integer.MAX_VALUE - 8;	// limit on some VMs
 
@@ -74,10 +81,7 @@ final class BufferCache {
 		return DEFAULT_CACHE.requestInstance();
 	}
 
-	/**
-	 * Requests a byte array of the next power of two sufficient to store the
-	 * specified number of bytes.
-	 */
+	// returns an array of at least "len"
 	public static byte[] requestBuffer(int size) {
 		if (size < 1) {
 			if (size == 0) {
@@ -87,17 +91,14 @@ final class BufferCache {
 		}
 		if (size > MAX_POW) {
 			if (size > MAX_LENGTH) {
-				throw new IllegalArgumentException("size exceeds VM limit (" + MAX_LENGTH + "): " + size);
+				throw new IllegalArgumentException("requested size exceeds VM limit (" + MAX_LENGTH + "): " + size);
 			}
 			return MAX_CACHE.requestInstance();
 		}
 		return CACHE_TABLE[bufIdx(size)].requestInstance();
 	}
 
-	/**
-	 * Releases the specified byte array into the cache to be re-used. Never
-	 * release an object that is still in use!
-	 */
+	// puts the specified array into the shared pool
 	public static void releaseBuffer(byte[] buf) {
 		if (buf != null) {
 			if (buf.length == 0) {
@@ -117,5 +118,8 @@ final class BufferCache {
 		public Cache(int size) {
 			super(() -> new byte[size]);
 		}
+	}
+
+	private BufferCache() {
 	}
 }

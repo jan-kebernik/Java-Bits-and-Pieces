@@ -6,13 +6,15 @@
 package org.bitsandpieces.util.io;
 
 /**
- * Provides an IOAddress with basic I/O functionality. Instances implementing
- * this interface are not meant to be used directly, but only via their
+ * Provides an IOAddress with basic I/O functionality, intended to serve as a
+ * bridge between an address and a buffer. Instances implementing this interface
+ * are not meant to be used directly, but only via their
  * {@link #buffer() buffers}.
  *
- * @author pp
+ * @author Jan Bebernik
  */
-interface IOSource extends AutoCloseable {
+// TODO decide whether to hide this interface
+public interface IOSource extends AutoCloseable {
 
 	/**
 	 * Returns the address of this source.
@@ -41,13 +43,12 @@ interface IOSource extends AutoCloseable {
 	 */
 	int read(long pos, byte[] buf, int off, int len) throws IOException;
 
-	// TODO possibly change return type to int, and adjust API design accordingly
 	/**
 	 * Writes the specified byte to the underlying file at the specified
 	 * position.
 	 *
-	 * Note that the underlying file will grow in size if bytes are written past
-	 * its current size. Writing to a position higher than the current size will
+	 * Note that the underlying file must grow in size if bytes are written past
+	 * its current size. Writing to a position higher than the current size must
 	 * cause the gap inbetween to be filled with 0-value bytes.
 	 *
 	 * @param pos the position to start writing to.
@@ -66,7 +67,8 @@ interface IOSource extends AutoCloseable {
 	void truncate(long size) throws IOException;
 
 	/**
-	 * Wraps this source in a buffer of a size appropriate for most tasks.
+	 * Wraps this source in a buffer of a size (if applicable) appropriate for
+	 * most tasks.
 	 *
 	 * @return a new IOBuffer wrapping this source.
 	 */
@@ -75,7 +77,7 @@ interface IOSource extends AutoCloseable {
 	}
 
 	/**
-	 * Wraps this source in a buffer of the specified size.
+	 * Wraps this source in a buffer of the specified size (if applicable).
 	 *
 	 * @param bufferSize the size of the buffer.
 	 * @return a new IOBuffer wrapping this source.

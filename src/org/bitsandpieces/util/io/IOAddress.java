@@ -8,7 +8,7 @@ package org.bitsandpieces.util.io;
 /**
  * Represents the location of a file in a phyiscal or virtual file system.
  *
- * @author pp
+ * @author Jan Kebernik
  */
 @FunctionalInterface
 public interface IOAddress {

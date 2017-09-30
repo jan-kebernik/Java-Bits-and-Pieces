@@ -8,22 +8,20 @@ package org.bitsandpieces.util.io;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
 import java.util.EnumSet;
-import java.util.Iterator;
 import java.util.Set;
-import java.util.function.Consumer;
 
 /**
- * Address for a physical file on disc. If it doesn't exist, attempting to open
- * it will create it.
+ * Address for a physical file on disk. If it doesn't exist, opening it will
+ * attempt to create it.
  *
- * @author pp
+ * @author Jan Kebernik
  */
+// backed FileChannel
 public class FileIOAddress implements IOAddress {
 
 	private final Path file;
@@ -109,7 +107,7 @@ public class FileIOAddress implements IOAddress {
 		@Override
 		public long size() throws IOException {
 			try {
-				return fc.size();
+				return this.fc.size();
 			} catch (java.io.IOException ex) {
 				throw new IOException(ex);
 			}
@@ -118,7 +116,7 @@ public class FileIOAddress implements IOAddress {
 		@Override
 		public int read(long pos, byte[] buf, int off, int len) throws IOException {
 			try {
-				return fc.read(wrap(buf, off, len), pos);
+				return this.fc.read(wrap(buf, off, len), pos);
 			} catch (java.io.IOException ex) {
 				throw new IOException(ex);
 			}
@@ -127,16 +125,9 @@ public class FileIOAddress implements IOAddress {
 		@Override
 		public void write(long pos, byte[] buf, int off, int len) throws IOException {
 			try {
-				if (fc.write(wrap(buf, off, len), pos) != len) {
+				if (this.fc.write(wrap(buf, off, len), pos) != len) {
 					throw new IOException("Unexpected number of bytes written.");
 				}
-				// TODO unsure about this
-				//	while (len != 0) {
-				//		int x = fc.write(wrap(buf, off, len), pos);
-				//		pos += x;
-				//		off += x;
-				//		len -= x;
-				//	}
 			} catch (java.io.IOException ex) {
 				throw new IOException(ex);
 			}
@@ -145,7 +136,7 @@ public class FileIOAddress implements IOAddress {
 		@Override
 		public void truncate(long size) throws IOException {
 			try {
-				fc.truncate(size);
+				this.fc.truncate(size);
 			} catch (java.io.IOException ex) {
 				throw new IOException(ex);
 			}
@@ -154,7 +145,7 @@ public class FileIOAddress implements IOAddress {
 		@Override
 		public void close() throws IOException {
 			try {
-				fc.close();
+				this.fc.close();
 			} catch (java.io.IOException ex) {
 				throw new IOException(ex);
 			}
